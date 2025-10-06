@@ -53,3 +53,10 @@ tasks.jacocoTestReport {
         html.required = true
     }
 }
+
+tasks.register('copyJavadoc', Copy) {
+    dependsOn tasks.javadoc
+    from("$buildDir/docs/javadoc")
+    into("$projectDir/docs/api")
+}
+
