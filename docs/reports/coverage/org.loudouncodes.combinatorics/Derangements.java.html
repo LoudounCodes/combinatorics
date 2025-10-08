@@ -1,0 +1,165 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>Derangements.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">loudouncodes-combinatorics</a> &gt; <a href="index.source.html" class="el_package">org.loudouncodes.combinatorics</a> &gt; <span class="el_source">Derangements.java</span></div><h1>Derangements.java</h1><pre class="source lang-java linenums">package org.loudouncodes.combinatorics;
+
+import java.util.Arrays;
+import java.util.Iterator;
+import java.util.NoSuchElementException;
+
+/**
+ * Derangements — full-length permutations {@code p} of {@code {0,1,...,n-1}} with no fixed points
+ * ({@code p[i] != i} for all {@code i}).
+ *
+ * &lt;p&gt;Order is lexicographic, induced by the underlying permutation order. Returned arrays are
+ * defensive copies; iterators obey the standard contract.
+ */
+public final class Derangements {
+
+  private Derangements() {
+    /* no instances */
+  }
+
+  /**
+   * Entry point for derangements over {@code {0,1,...,n-1}}.
+   *
+   * @param n size of the permutation (must be {@code &gt;= 0})
+   * @return a builder for constructing derangement iterables and counts
+   * @throws IllegalArgumentException if {@code n &lt; 0}
+   */
+  public static Builder of(int n) {
+<span class="fc bfc" id="L28" title="All 2 branches covered.">    if (n &lt; 0) throw new IllegalArgumentException(&quot;n must be non-negative&quot;);</span>
+<span class="fc" id="L29">    return new Builder(n);</span>
+  }
+
+  /** Fluent builder for derangement enumeration and counts. */
+  public static final class Builder {
+    private final int n;
+
+<span class="fc" id="L36">    private Builder(int n) {</span>
+<span class="fc" id="L37">      this.n = n;</span>
+<span class="fc" id="L38">    }</span>
+
+    /**
+     * Enumerate all derangements in lexicographic order.
+     *
+     * @return an iterable over all derangements of {@code n}
+     */
+    public All all() {
+<span class="fc" id="L46">      return new All(n);</span>
+    }
+
+    /**
+     * Total number of derangements {@code !n} (subfactorial).
+     *
+     * &lt;p&gt;Uses the recurrence {@code !0 = 1}, {@code !1 = 0}, {@code !n = (n-1) * (!(n-1) +
+     * !(n-2))}. Note: returns a {@code long} and will overflow for sufficiently large {@code n};
+     * intended for classroom-scale values.
+     *
+     * @return {@code !n} (the subfactorial of {@code n})
+     */
+    public long size() {
+<span class="fc bfc" id="L59" title="All 2 branches covered.">      if (n == 0) return 1L;</span>
+<span class="fc bfc" id="L60" title="All 2 branches covered.">      if (n == 1) return 0L;</span>
+<span class="fc" id="L61">      long d0 = 1L; // !0</span>
+<span class="fc" id="L62">      long d1 = 0L; // !1</span>
+<span class="fc" id="L63">      long dk = 0L;</span>
+<span class="fc bfc" id="L64" title="All 2 branches covered.">      for (int k = 2; k &lt;= n; k++) {</span>
+<span class="fc" id="L65">        dk = (k - 1L) * (d1 + d0);</span>
+<span class="fc" id="L66">        d0 = d1;</span>
+<span class="fc" id="L67">        d1 = dk;</span>
+      }
+<span class="fc" id="L69">      return dk;</span>
+    }
+  }
+
+  /** Iterable wrapper for all derangements of a given size. */
+  public static final class All implements Iterable&lt;int[]&gt; {
+    private final int n;
+
+<span class="fc" id="L77">    private All(int n) {</span>
+<span class="fc" id="L78">      this.n = n;</span>
+<span class="fc" id="L79">    }</span>
+
+    @Override
+    public Iterator&lt;int[]&gt; iterator() {
+<span class="fc" id="L83">      return new It(n);</span>
+    }
+
+    /**
+     * Number of derangements (subfactorial {@code !n}).
+     *
+     * @return {@code !n}
+     */
+    public long size() {
+<span class="fc bfc" id="L92" title="All 2 branches covered.">      if (n == 0) return 1L;</span>
+<span class="fc bfc" id="L93" title="All 2 branches covered.">      if (n == 1) return 0L;</span>
+<span class="fc" id="L94">      long d0 = 1L; // !0</span>
+<span class="fc" id="L95">      long d1 = 0L; // !1</span>
+<span class="fc" id="L96">      long dk = 0L;</span>
+<span class="fc bfc" id="L97" title="All 2 branches covered.">      for (int k = 2; k &lt;= n; k++) {</span>
+<span class="fc" id="L98">        dk = (k - 1L) * (d1 + d0);</span>
+<span class="fc" id="L99">        d0 = d1;</span>
+<span class="fc" id="L100">        d1 = dk;</span>
+      }
+<span class="fc" id="L102">      return dk;</span>
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Filtering iterator: iterate all permutations in lex order and skip those
+  // with fixed points. This preserves lex order among derangements and keeps
+  // the implementation simple.
+  // ---------------------------------------------------------------------------
+  private static final class It implements Iterator&lt;int[]&gt; {
+    private final Iterator&lt;int[]&gt; base; // permutations iterator over n elements
+    private int[] next; // next derangement to return (null if none left)
+
+<span class="fc" id="L115">    It(int n) {</span>
+<span class="fc" id="L116">      this.base = Permutations.of(n).take(n).iterator();</span>
+<span class="fc" id="L117">      advance();</span>
+<span class="fc" id="L118">    }</span>
+
+    @Override
+    public boolean hasNext() {
+<span class="fc bfc" id="L122" title="All 2 branches covered.">      return next != null;</span>
+    }
+
+    @Override
+    public int[] next() {
+<span class="fc bfc" id="L127" title="All 2 branches covered.">      if (next == null) throw new NoSuchElementException(&quot;Derangements exhausted&quot;);</span>
+<span class="fc" id="L128">      int[] out = Arrays.copyOf(next, next.length); // defensive copy</span>
+<span class="fc" id="L129">      advance();</span>
+<span class="fc" id="L130">      return out;</span>
+    }
+
+    private void advance() {
+<span class="fc" id="L134">      next = null;</span>
+<span class="fc bfc" id="L135" title="All 2 branches covered.">      while (base.hasNext()) {</span>
+<span class="fc" id="L136">        int[] p = base.next();</span>
+<span class="fc bfc" id="L137" title="All 2 branches covered.">        if (isDerangement(p)) {</span>
+<span class="fc" id="L138">          next = p;</span>
+<span class="fc" id="L139">          return;</span>
+        }
+<span class="fc" id="L141">      }</span>
+<span class="fc" id="L142">    }</span>
+
+    private static boolean isDerangement(int[] p) {
+<span class="fc bfc" id="L145" title="All 2 branches covered.">      for (int i = 0; i &lt; p.length; i++) {</span>
+<span class="fc bfc" id="L146" title="All 2 branches covered.">        if (p[i] == i) return false;</span>
+      }
+<span class="fc" id="L148">      return true;</span>
+    }
+  }
+
+  /**
+   * Demo entry point.
+   *
+   * @param args command-line arguments (unused)
+   */
+  public static void main(String[] args) {
+<span class="nc" id="L158">    int n = 4;</span>
+<span class="nc" id="L159">    System.out.println(&quot;!&quot; + n + &quot; = &quot; + Derangements.of(n).size());</span>
+<span class="nc bnc" id="L160" title="All 2 branches missed.">    for (int[] d : Derangements.of(n).all()) {</span>
+<span class="nc" id="L161">      System.out.println(Arrays.toString(d));</span>
+<span class="nc" id="L162">    }</span>
+<span class="nc" id="L163">  }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>IndexingAdapter.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">loudouncodes-combinatorics</a> &gt; <a href="index.source.html" class="el_package">org.loudouncodes.combinatorics</a> &gt; <span class="el_source">IndexingAdapter.java</span></div><h1>IndexingAdapter.java</h1><pre class="source lang-java linenums">package org.loudouncodes.combinatorics;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Iterator;
+import java.util.List;
+import java.util.NoSuchElementException;
+import java.util.Objects;
+
+/**
+ * Bridges from &lt;em&gt;indices&lt;/em&gt; to &lt;em&gt;elements&lt;/em&gt;.
+ *
+ * &lt;p&gt;Wrap any {@code Iterable&lt;int[]&gt;} together with a backing {@code List&lt;E&gt;} and iterate {@code
+ * List&lt;E&gt;} tuples instead of raw index arrays. Each returned list is a fresh, unmodifiable snapshot
+ * of the mapped elements (safe for students to keep or mutate references inside without affecting
+ * the iterator's internal state).
+ *
+ * &lt;h2&gt;Example (pairs of toppings)&lt;/h2&gt;
+ *
+ * &lt;pre&gt;{@code
+ * List&lt;String&gt; toppings = List.of(&quot;Pepperoni&quot;,&quot;Mushrooms&quot;,&quot;Onions&quot;,&quot;Olives&quot;);
+ * for (List&lt;String&gt; pizza :
+ *       new IndexingAdapter&lt;&gt;(Combinations.of(toppings.size()).choose(2), toppings)) {
+ *   System.out.println(pizza);
+ * }
+ * // [Pepperoni, Mushrooms]
+ * // [Pepperoni, Onions]
+ * // [Pepperoni, Olives]
+ * // [Mushrooms, Onions]
+ * // [Mushrooms, Olives]
+ * // [Onions, Olives]
+ * }&lt;/pre&gt;
+ *
+ * &lt;p&gt;You can wrap &lt;em&gt;any&lt;/em&gt; of the generators in this package: combinations, permutations,
+ * derangements, Cartesian product, etc.
+ *
+ * @param &lt;E&gt; element type of the backing list
+ * @since 0.1.0
+ */
+public final class IndexingAdapter&lt;E&gt; implements Iterable&lt;List&lt;E&gt;&gt; {
+
+  private final Iterable&lt;int[]&gt; tuples;
+  private final List&lt;E&gt; items;
+
+  /**
+   * Creates an adapter that maps each emitted index tuple to a list of elements from {@code items}.
+   *
+   * @param tuples iterable of index arrays (each index must be in {@code [0, items.size()-1]})
+   * @param items backing list of elements (not copied; element references are reused)
+   * @throws NullPointerException if either argument is {@code null}
+   */
+<span class="fc" id="L52">  public IndexingAdapter(Iterable&lt;int[]&gt; tuples, List&lt;E&gt; items) {</span>
+<span class="fc" id="L53">    this.tuples = Objects.requireNonNull(tuples, &quot;tuples&quot;);</span>
+<span class="fc" id="L54">    this.items = Objects.requireNonNull(items, &quot;items&quot;);</span>
+<span class="fc" id="L55">  }</span>
+
+  /**
+   * Convenience factory identical to {@link #IndexingAdapter(Iterable, List)}.
+   *
+   * @param tuples iterable of index arrays
+   * @param items backing list of elements
+   * @param &lt;E&gt; element type
+   * @return a new adapter
+   */
+  public static &lt;E&gt; IndexingAdapter&lt;E&gt; of(Iterable&lt;int[]&gt; tuples, List&lt;E&gt; items) {
+<span class="nc" id="L66">    return new IndexingAdapter&lt;&gt;(tuples, items);</span>
+  }
+
+  @Override
+  public Iterator&lt;List&lt;E&gt;&gt; iterator() {
+<span class="fc" id="L71">    return new Iterator&lt;List&lt;E&gt;&gt;() {</span>
+<span class="fc" id="L72">      private final Iterator&lt;int[]&gt; it = tuples.iterator();</span>
+
+      @Override
+      public boolean hasNext() {
+<span class="fc" id="L76">        return it.hasNext();</span>
+      }
+
+      @Override
+      public List&lt;E&gt; next() {
+<span class="fc bfc" id="L81" title="All 2 branches covered.">        if (!hasNext()) throw new NoSuchElementException();</span>
+<span class="fc" id="L82">        int[] idx = it.next(); // defensive copy not required; we read-and-map immediately</span>
+        // Map indices -&gt; elements with bounds checks
+<span class="fc" id="L84">        List&lt;E&gt; out = new ArrayList&lt;&gt;(idx.length);</span>
+<span class="fc" id="L85">        int size = items.size();</span>
+<span class="fc bfc" id="L86" title="All 2 branches covered.">        for (int i : idx) {</span>
+<span class="pc bpc" id="L87" title="1 of 4 branches missed.">          if (i &lt; 0 || i &gt;= size) {</span>
+<span class="fc" id="L88">            throw new IndexOutOfBoundsException(</span>
+                &quot;Index &quot; + i + &quot; out of bounds for items size &quot; + size);
+          }
+<span class="fc" id="L91">          out.add(items.get(i));</span>
+        }
+<span class="fc" id="L93">        return Collections.unmodifiableList(out);</span>
+      }
+    };
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>
