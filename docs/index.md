@@ -120,7 +120,7 @@ public class PizzaDemo {
 
 ## API Docs
 
-* [Javadoc](./api/)
+* [Javadoc](./reports/api/)
 
 ---
 
