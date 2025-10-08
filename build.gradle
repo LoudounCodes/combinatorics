@@ -99,11 +99,11 @@ tasks.withType(Pmd).configureEach {
 
 // ---- Docs helpers: publish reports to GitHub Pages (docs/) ----
 
-// Copy Javadoc to docs/javadoc (optional)
-tasks.register('copyJavadoc', Copy) {
+// Javadoc HTML -> docs/reports/api/
+tasks.register('publishJavadoc', Sync) {
     dependsOn tasks.javadoc
-    from("$buildDir/docs/javadoc")
-    into("$projectDir/docs/javadoc")
+    from(layout.buildDirectory.dir("docs/javadoc"))   // where Gradle writes javadoc HTML
+    into(layout.projectDirectory.dir("docs/reports/api"))
 }
 
 // Gradle test report -> docs/reports/tests/
@@ -129,7 +129,10 @@ tasks.register('publishPmdReports', Sync) {
 
 // Aggregate publisher (no index.html generation)
 tasks.register('publishReports') {
-    dependsOn 'publishTestReport', 'publishCoverageReport', 'publishPmdReports'
+    dependsOn 'publishTestReport',
+              'publishCoverageReport',
+              'publishPmdReports',
+              'publishJavadoc'
 }
 
 // Keep Pages current after every build
