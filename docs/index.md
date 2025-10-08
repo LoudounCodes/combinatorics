@@ -113,7 +113,7 @@ public class PizzaDemo {
 
 ## API Docs
 
-* [Javadoc](./javadoc/)
+* [Javadoc](./api/)
 
 ---
 
