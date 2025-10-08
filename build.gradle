@@ -1,7 +1,10 @@
+import org.gradle.testing.jacoco.tasks.JacocoCoverageVerification
+
 plugins {
     id 'java'
     id 'com.diffplug.spotless' version '6.25.0'
     id 'jacoco'
+    id 'pmd'
 }
 
 group = 'org.loudouncodes'
@@ -9,7 +12,7 @@ version = '0.1.0'
 
 java {
     toolchain {
-        languageVersion = JavaLanguageVersion.of(21)   // pick the JDK you want to enforce
+        languageVersion = JavaLanguageVersion.of(21)   // enforce JDK 21
     }
     withJavadocJar()
     withSourcesJar()
@@ -24,7 +27,7 @@ dependencies {
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testImplementation 'org.assertj:assertj-core:3.26.3'
 
-    // Add this line so Gradle can start the JUnit Platform
+    // Start the JUnit Platform
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
@@ -51,12 +54,83 @@ tasks.jacocoTestReport {
     reports {
         xml.required = true
         html.required = true
+        csv.required = false
     }
 }
 
+// Optional: keep a hard gate if you want minimum coverage later.
+// tasks.named('jacocoTestCoverageVerification', JacocoCoverageVerification).configure {
+//     dependsOn tasks.test
+//     violationRules {
+//         rule {
+//             limit {
+//                 counter = 'INSTRUCTION'
+//                 value   = 'COVEREDRATIO'
+//                 minimum = 0.80
+//             }
+//         }
+//     }
+// }
+// check.dependsOn 'jacocoTestCoverageVerification'
+
+// ---- Fail hard for Javadoc problems ----
+tasks.withType(Javadoc).configureEach {
+    // Treat warnings as errors and enable doclint
+    options.addBooleanOption('Xwerror', true)
+    options.addBooleanOption('Xdoclint:all', true)
+}
+
+// ---- PMD (show metrics/violations; do not fail the build) ----
+pmd {
+    consoleOutput = true
+    incrementalAnalysis = true
+    ignoreFailures = true
+    if (file('config/pmd/ruleset.xml').exists()) {
+        ruleSets = []
+        ruleSetFiles = files('config/pmd/ruleset.xml')
+    }
+}
+tasks.withType(Pmd).configureEach {
+    reports {
+        html.required = true    // build/reports/pmd/main.html, test.html
+        xml.required = false
+    }
+}
+
+// ---- Docs helpers: publish reports to GitHub Pages (docs/) ----
+
+// Copy Javadoc to docs/javadoc (optional)
 tasks.register('copyJavadoc', Copy) {
     dependsOn tasks.javadoc
     from("$buildDir/docs/javadoc")
-    into("$projectDir/docs/api")
+    into("$projectDir/docs/javadoc")
 }
 
+// Gradle test report -> docs/reports/tests/
+tasks.register('publishTestReport', Sync) {
+    dependsOn tasks.test
+    from(layout.buildDirectory.dir("reports/tests/test"))
+    into(layout.projectDirectory.dir("docs/reports/tests"))
+}
+
+// JaCoCo HTML -> docs/reports/coverage/
+tasks.register('publishCoverageReport', Sync) {
+    dependsOn tasks.jacocoTestReport
+    from(layout.buildDirectory.dir("reports/jacoco/test/html"))
+    into(layout.projectDirectory.dir("docs/reports/coverage"))
+}
+
+// PMD HTML -> docs/reports/pmd/
+tasks.register('publishPmdReports', Sync) {
+    dependsOn tasks.pmdMain, tasks.pmdTest
+    from(layout.buildDirectory.dir("reports/pmd"))
+    into(layout.projectDirectory.dir("docs/reports/pmd"))
+}
+
+// Aggregate publisher (no index.html generation)
+tasks.register('publishReports') {
+    dependsOn 'publishTestReport', 'publishCoverageReport', 'publishPmdReports'
+}
+
+// Keep Pages current after every build
+build.finalizedBy tasks.named('publishReports')
