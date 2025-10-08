@@ -9,126 +9,109 @@ import org.junit.jupiter.api.Test;
 class IndexingAdapterTest {
 
   @Test
-  @DisplayName("Maps combinations of indices to element lists (names example)")
-  void mapsCombinationsToLists() {
-    List<String> names = List.of("Ada", "Grace", "Edsger", "Barbara");
-    // n = 4, k = 2 → C(4,2) = 6 pairs
-    IndexingAdapter<String> adapted =
-        new IndexingAdapter<>(new Combinations(2, names.size()), names);
+  @DisplayName("Adapts combinations to element pairs in lexicographic order")
+  void mapsCombinationsToElements() {
+    List<String> items = List.of("A", "B", "C", "D");
 
     List<List<String>> got = new ArrayList<>();
-    for (List<String> pair : adapted) {
+    for (List<String> pair :
+        new IndexingAdapter<>(Combinations.of(items.size()).choose(2), items)) {
       got.add(pair);
     }
 
     assertThat(got)
         .hasSize(6)
         .satisfiesExactly(
-            a -> assertThat(a).containsExactly("Ada", "Grace"),
-            a -> assertThat(a).containsExactly("Ada", "Edsger"),
-            a -> assertThat(a).containsExactly("Ada", "Barbara"),
-            a -> assertThat(a).containsExactly("Grace", "Edsger"),
-            a -> assertThat(a).containsExactly("Grace", "Barbara"),
-            a -> assertThat(a).containsExactly("Edsger", "Barbara"));
+            l -> assertThat(l).containsExactly("A", "B"),
+            l -> assertThat(l).containsExactly("A", "C"),
+            l -> assertThat(l).containsExactly("A", "D"),
+            l -> assertThat(l).containsExactly("B", "C"),
+            l -> assertThat(l).containsExactly("B", "D"),
+            l -> assertThat(l).containsExactly("C", "D"));
   }
 
   @Test
-  @DisplayName("Maps permutations of indices to element lists (integers example)")
-  void mapsPermutationsToLists() {
-    List<Integer> data = List.of(10, 20, 30);
-    // n = 3, k = 2 → 3P2 = 6
-    IndexingAdapter<Integer> adapted =
-        new IndexingAdapter<>(new Permutations(2, data.size()), data);
+  @DisplayName("Adapts permutations to ordered tuples (order preserved)")
+  void mapsPermutationsToOrderedTuples() {
+    List<String> items = List.of("X", "Y", "Z");
 
-    List<List<Integer>> got = new ArrayList<>();
-    for (List<Integer> t : adapted) {
+    List<List<String>> got = new ArrayList<>();
+    for (List<String> t :
+        new IndexingAdapter<>(Permutations.of(items.size()).take(2), items)) {
       got.add(t);
     }
 
     assertThat(got)
         .hasSize(6)
         .satisfiesExactly(
-            a -> assertThat(a).containsExactly(10, 20),
-            a -> assertThat(a).containsExactly(10, 30),
-            a -> assertThat(a).containsExactly(20, 10),
-            a -> assertThat(a).containsExactly(20, 30),
-            a -> assertThat(a).containsExactly(30, 10),
-            a -> assertThat(a).containsExactly(30, 20));
+            l -> assertThat(l).containsExactly("X", "Y"),
+            l -> assertThat(l).containsExactly("X", "Z"),
+            l -> assertThat(l).containsExactly("Y", "X"),
+            l -> assertThat(l).containsExactly("Y", "Z"),
+            l -> assertThat(l).containsExactly("Z", "X"),
+            l -> assertThat(l).containsExactly("Z", "Y"));
   }
 
   @Test
-  @DisplayName("Returned lists are unmodifiable (defensive output)")
+  @DisplayName("Returned lists are unmodifiable snapshots")
   void returnedListsAreUnmodifiable() {
-    List<String> names = List.of("A", "B", "C");
-    IndexingAdapter<String> adapted =
-        new IndexingAdapter<>(new Combinations(2, names.size()), names);
+    List<String> items = List.of("P", "Q", "R");
 
-    Iterator<List<String>> it = adapted.iterator();
+    Iterator<List<String>> it =
+        new IndexingAdapter<>(Combinations.of(items.size()).choose(2), items).iterator();
+
     List<String> first = it.next();
-
-    assertThatThrownBy(() -> first.add("X")).isInstanceOf(UnsupportedOperationException.class);
-    assertThatThrownBy(() -> first.remove(0)).isInstanceOf(UnsupportedOperationException.class);
+    assertThat(first).containsExactly("P", "Q");
+    assertThatThrownBy(() -> first.add("NEW")).isInstanceOf(UnsupportedOperationException.class);
   }
 
   @Test
-  @DisplayName("Out-of-bounds indices throw IndexOutOfBoundsException when iterated")
-  void outOfBoundsIndicesThrow() {
-    // A tiny iterable that yields one invalid index tuple [0, 3] for a source of size 3 (valid
-    // 0..2).
-    Iterable<int[]> badTuples =
+  @DisplayName("Bounds check: invalid index in tuple throws IndexOutOfBoundsException")
+  void invalidIndexThrows() {
+    List<String> items = List.of("a", "b", "c", "d");
+    Iterable<int[]> bad =
         () ->
-            new Iterator<>() {
-              private boolean used = false;
-
-              @Override
-              public boolean hasNext() {
-                return !used;
-              }
-
-              @Override
-              public int[] next() {
-                if (used) throw new NoSuchElementException();
-                used = true;
-                return new int[] {0, 3}; // 3 is out of bounds for source size 3
+            new Iterator<int[]>() {
+              boolean done = false;
+              @Override public boolean hasNext() { return !done; }
+              @Override public int[] next() {
+                if (done) throw new NoSuchElementException();
+                done = true;
+                return new int[] {0, 5};
               }
             };
 
-    List<String> source = List.of("A", "B", "C");
-    IndexingAdapter<String> adapted = new IndexingAdapter<>(badTuples, source);
-
-    Iterator<List<String>> it = adapted.iterator();
-    assertThat(it.hasNext()).isTrue();
+    IndexingAdapter<String> adapter = new IndexingAdapter<>(bad, items);
+    Iterator<List<String>> it = adapter.iterator();
     assertThatThrownBy(it::next).isInstanceOf(IndexOutOfBoundsException.class);
+  }
+
+  @Test
+  @DisplayName("Edge case: choose(0) maps to a single empty list")
+  void emptyTupleMapsToEmptyList() {
+    List<String> items = List.of("one", "two", "three");
+
+    List<List<String>> got = new ArrayList<>();
+    for (List<String> t :
+        new IndexingAdapter<>(Combinations.of(items.size()).choose(0), items)) {
+      got.add(t);
+    }
+
+    assertThat(got).hasSize(1);
+    assertThat(got.get(0)).isEmpty();
   }
 
   @Test
   @DisplayName("Iterator respects hasNext()/next() and throws on exhaustion")
   void iteratorContract() {
-    List<String> names = List.of("Ada", "Grace", "Edsger");
-    IndexingAdapter<String> adapted =
-        new IndexingAdapter<>(new Combinations(1, names.size()), names); // 3 tuples
+    List<String> items = List.of("A", "B");
+    IndexingAdapter<String> adapter =
+        new IndexingAdapter<>(Combinations.of(items.size()).choose(2), items);
 
-    Iterator<List<String>> it = adapted.iterator();
-    int count = 0;
-    while (it.hasNext()) {
-      List<String> t = it.next();
-      assertThat(t).hasSize(1);
-      assertThat(names).contains(t.get(0));
-      count++;
-    }
-    assertThat(count).isEqualTo(3);
+    Iterator<List<String>> it = adapter.iterator();
+    assertThat(it.hasNext()).isTrue();
+    assertThat(it.next()).containsExactly("A", "B");
+    assertThat(it.hasNext()).isFalse();
     assertThatThrownBy(it::next).isInstanceOf(NoSuchElementException.class);
-  }
-
-  @Test
-  @DisplayName("Factory method IndexingAdapter.of(...) returns a working adapter")
-  void factoryMethodWorks() {
-    List<String> data = List.of("X", "Y");
-    IndexingAdapter<String> adapted = IndexingAdapter.of(new Combinations(2, 2), data);
-
-    List<List<String>> got = new ArrayList<>();
-    adapted.forEach(got::add);
-
-    assertThat(got).hasSize(1).first().isEqualTo(List.of("X", "Y"));
   }
 }

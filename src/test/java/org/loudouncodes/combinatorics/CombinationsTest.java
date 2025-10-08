@@ -2,10 +2,7 @@ package org.loudouncodes.combinatorics;
 
 import static org.assertj.core.api.Assertions.*;
 
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
-import java.util.NoSuchElementException;
+import java.util.*;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -13,96 +10,100 @@ class CombinationsTest {
 
   @Test
   @DisplayName("Generates lexicographic combinations for n=4, k=2")
-  void generatesLexicographicCombinations() {
-    List<int[]> seen = new ArrayList<>();
-    for (int[] c : new Combinations(2, 4)) {
-      seen.add(c);
-    }
+  void lexicographicOrder_n4k2() {
+    Combinations.KChoose combos = Combinations.of(4).choose(2);
+    List<int[]> got = new ArrayList<>();
+    for (int[] c : combos) got.add(c);
 
-    // C(4,2) = 6
-    assertThat(seen).hasSize(6);
-
-    // Exact lexicographic order
-    assertThat(seen.get(0)).containsExactly(0, 1);
-    assertThat(seen.get(1)).containsExactly(0, 2);
-    assertThat(seen.get(2)).containsExactly(0, 3);
-    assertThat(seen.get(3)).containsExactly(1, 2);
-    assertThat(seen.get(4)).containsExactly(1, 3);
-    assertThat(seen.get(5)).containsExactly(2, 3);
+    assertThat(combos.size()).isEqualTo(6); // C(4,2)=6
+    assertThat(got)
+        .hasSize(6)
+        .satisfiesExactly(
+            a -> assertThat(a).containsExactly(0, 1),
+            a -> assertThat(a).containsExactly(0, 2),
+            a -> assertThat(a).containsExactly(0, 3),
+            a -> assertThat(a).containsExactly(1, 2),
+            a -> assertThat(a).containsExactly(1, 3),
+            a -> assertThat(a).containsExactly(2, 3));
   }
 
   @Test
   @DisplayName("Count matches known value: C(12,3) = 220")
-  void countMatchesKnownValue() {
-    int count = 0;
-    for (int[] ignored : new Combinations(3, 12)) {
-      count++;
-    }
+  void countC12_3() {
+    Combinations.KChoose combos = Combinations.of(12).choose(3);
+    long count = 0;
+    for (int[] ignored : combos) count++;
     assertThat(count).isEqualTo(220);
+    assertThat(combos.size()).isEqualTo(220);
   }
 
   @Test
   @DisplayName("Edge case k=0 yields one empty combination")
-  void kZeroYieldsOneEmptyCombination() {
-    List<int[]> seen = new ArrayList<>();
-    for (int[] c : new Combinations(0, 5)) {
-      seen.add(c);
-    }
-    assertThat(seen).hasSize(1);
-    assertThat(seen.get(0)).isEmpty();
+  void kEqualsZero() {
+    Combinations.KChoose combos = Combinations.of(5).choose(0);
+    List<int[]> got = new ArrayList<>();
+    for (int[] c : combos) got.add(c);
+
+    assertThat(got).hasSize(1);
+    assertThat(got.get(0)).isEmpty();
+    assertThat(combos.size()).isEqualTo(1);
   }
 
   @Test
   @DisplayName("Edge case k=n yields exactly one combination [0,1,...,n-1]")
-  void kEqualsNYieldsOneFullCombination() {
-    int n = 5;
-    List<int[]> seen = new ArrayList<>();
-    for (int[] c : new Combinations(n, n)) {
-      seen.add(c);
-    }
-    assertThat(seen).hasSize(1);
-    assertThat(seen.get(0)).containsExactly(0, 1, 2, 3, 4);
-  }
+  void kEqualsN() {
+    int n = 6;
+    Combinations.KChoose combos = Combinations.of(n).choose(n);
+    List<int[]> got = new ArrayList<>();
+    for (int[] c : combos) got.add(c);
 
-  @Test
-  @DisplayName("Invalid arguments throw IllegalArgumentException")
-  void invalidArgumentsThrow() {
-    assertThatThrownBy(() -> new Combinations(-1, 5)).isInstanceOf(IllegalArgumentException.class);
-    assertThatThrownBy(() -> new Combinations(3, -1)).isInstanceOf(IllegalArgumentException.class);
-    assertThatThrownBy(() -> new Combinations(6, 5)).isInstanceOf(IllegalArgumentException.class);
+    assertThat(got).hasSize(1);
+    assertThat(got.get(0)).containsExactly(0, 1, 2, 3, 4, 5);
+    assertThat(combos.size()).isEqualTo(1);
   }
 
   @Test
   @DisplayName("Iterator respects hasNext()/next() contract and throws on exhaustion")
-  void iteratorExhaustion() {
-    Combinations combos = new Combinations(2, 3); // C(3,2)=3
-    Iterator<int[]> it = combos.iterator();
-
-    assertThat(it.hasNext()).isTrue();
-    it.next();
-    assertThat(it.hasNext()).isTrue();
-    it.next();
-    assertThat(it.hasNext()).isTrue();
-    it.next();
-    assertThat(it.hasNext()).isFalse();
+  void iteratorContract() {
+    Iterator<int[]> it = Combinations.of(4).choose(2).iterator();
+    int count = 0;
+    while (it.hasNext()) {
+      int[] c = it.next();
+      assertThat(c).hasSize(2);
+      count++;
+    }
+    assertThat(count).isEqualTo(6);
     assertThatThrownBy(it::next).isInstanceOf(NoSuchElementException.class);
   }
 
   @Test
   @DisplayName("Returned arrays are defensive copies (immutability)")
-  void returnedArraysAreDefensiveCopies() {
-    Iterator<int[]> it = new Combinations(2, 4).iterator();
+  void defensiveCopies() {
+    Iterator<int[]> it = Combinations.of(5).choose(2).iterator();
+    int[] first = it.next();
+    int[] snapshot = first.clone();
 
-    int[] first = it.next(); // expect [0,1]
-    int[] snapshot = first.clone(); // keep a copy
-    first[0] = 99; // mutate the returned array
+    // mutate caller copy
+    first[0] = 99;
 
-    // Advance once more to force iterator to use its internal state
-    int[] second = it.next(); // expect [0,2]
+    // next element should be unaffected; and snapshot should remain intact
+    int[] second = it.next();
+    assertThat(snapshot[0]).isNotEqualTo(99);
+    assertThat(second).isNotEqualTo(snapshot);
+  }
 
-    // Our mutation must not have altered the original first combination value
-    assertThat(snapshot).containsExactly(0, 1);
-    // And the iterator should continue producing correct values
-    assertThat(second).containsExactly(0, 2);
+  @Test
+  @DisplayName("Invalid arguments throw IllegalArgumentException")
+  void invalidArgs() {
+    assertThatThrownBy(() -> Combinations.of(-1))
+        .isInstanceOf(IllegalArgumentException.class);
+
+    // n=5, k<0
+    assertThatThrownBy(() -> Combinations.of(5).choose(-1))
+        .isInstanceOf(IllegalArgumentException.class);
+
+    // n=5, k>n
+    assertThatThrownBy(() -> Combinations.of(5).choose(6))
+        .isInstanceOf(IllegalArgumentException.class);
   }
 }

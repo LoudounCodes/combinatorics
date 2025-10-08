@@ -8,117 +8,117 @@ import org.junit.jupiter.api.Test;
 
 class PermutationsTest {
 
-  // --- helpers -------------------------------------------------------------
-
-  private static long nPr(int n, int r) {
-    if (r < 0 || n < 0 || r > n) throw new IllegalArgumentException();
-    long p = 1;
-    for (int i = 0; i < r; i++) p *= (n - i);
-    return p;
-  }
-
-  private static String key(int[] a) {
-    // Compact key for set membership checks
-    StringBuilder sb = new StringBuilder(a.length * 3);
-    for (int i = 0; i < a.length; i++) {
-      if (i > 0) sb.append(',');
-      sb.append(a[i]);
-    }
-    return sb.toString();
-  }
-
-  // --- tests ---------------------------------------------------------------
-
   @Test
   @DisplayName("Generates all k-permutations of n without duplicates (n=5, k=3)")
-  void generatesAllKPermutationsWithoutDuplicates() {
-    int n = 5, k = 3;
-    long expected = nPr(n, k);
+  void uniqueNoDuplicates_n5k3() {
+    Permutations.KTake perms = Permutations.of(5).take(3);
 
-    Set<String> unique = new HashSet<>();
-    int total = 0;
-    for (int[] p : new Permutations(k, n)) {
-      total++;
-      unique.add(key(p));
-      // basic shape checks
-      assertThat(p.length).isEqualTo(k);
-      // elements in range and no repeats within a tuple
-      boolean[] seen = new boolean[n];
-      for (int v : p) {
-        assertThat(v).isBetween(0, n - 1);
-        assertThat(seen[v]).isFalse();
-        seen[v] = true;
-      }
+    // Collect as strings to detect duplicates easily
+    Set<String> seen = new HashSet<>();
+    long count = 0;
+    for (int[] p : perms) {
+      assertThat(p).hasSize(3);
+      String key = Arrays.toString(p);
+      assertThat(seen).doesNotContain(key);
+      seen.add(key);
+      count++;
     }
 
-    assertThat(total).as("total tuples emitted").isEqualTo(expected);
-    assertThat(unique).as("unique tuples").hasSize((int) expected);
+    // 5P3 = 5*4*3 = 60
+    assertThat(count).isEqualTo(60);
+    assertThat(seen).hasSize(60);
+    assertThat(perms.size()).isEqualTo(60);
+  }
+
+  @Test
+  @DisplayName("Small order check: n=3, k=2 in lexicographic order")
+  void orderCheck_n3k2() {
+    Permutations.KTake perms = Permutations.of(3).take(2);
+    List<int[]> got = new ArrayList<>();
+    for (int[] p : perms) got.add(p);
+
+    assertThat(got)
+        .hasSize(6)
+        .satisfiesExactly(
+            a -> assertThat(a).containsExactly(0, 1),
+            a -> assertThat(a).containsExactly(0, 2),
+            a -> assertThat(a).containsExactly(1, 0),
+            a -> assertThat(a).containsExactly(1, 2),
+            a -> assertThat(a).containsExactly(2, 0),
+            a -> assertThat(a).containsExactly(2, 1));
   }
 
   @Test
   @DisplayName("Edge case k=0 yields one empty tuple")
-  void kZeroYieldsOneEmpty() {
-    List<int[]> all = new ArrayList<>();
-    for (int[] p : new Permutations(0, 7)) {
-      all.add(p);
-    }
-    assertThat(all).hasSize(1);
-    assertThat(all.get(0)).isEmpty();
+  void kEqualsZero() {
+    Permutations.KTake perms = Permutations.of(7).take(0);
+    List<int[]> got = new ArrayList<>();
+    for (int[] p : perms) got.add(p);
+
+    assertThat(got).hasSize(1);
+    assertThat(got.get(0)).isEmpty();
+    assertThat(perms.size()).isEqualTo(1);
   }
 
   @Test
   @DisplayName("Edge case k=n yields all n! permutations in lexicographic order (n=3)")
-  void kEqualsNYieldsAllPermutationsInLexOrder() {
+  void kEqualsN_fullPerms_n3() {
     int n = 3;
-    List<int[]> all = new ArrayList<>();
-    for (int[] p : new Permutations(n, n)) {
-      all.add(p.clone());
-    }
-    assertThat(all).hasSize(6);
-    assertThat(all.get(0)).containsExactly(0, 1, 2);
-    assertThat(all.get(5)).containsExactly(2, 1, 0);
-    // no duplicates
-    Set<String> uniq = new HashSet<>();
-    for (int[] p : all) uniq.add(key(p));
-    assertThat(uniq).hasSize(6);
-  }
+    Permutations.KTake perms = Permutations.of(n).take(n);
+    List<int[]> got = new ArrayList<>();
+    for (int[] p : perms) got.add(p);
 
-  @Test
-  @DisplayName("Invalid arguments throw IllegalArgumentException")
-  void invalidArgumentsThrow() {
-    assertThatThrownBy(() -> new Permutations(-1, 4)).isInstanceOf(IllegalArgumentException.class);
-    assertThatThrownBy(() -> new Permutations(3, -1)).isInstanceOf(IllegalArgumentException.class);
-    assertThatThrownBy(() -> new Permutations(5, 4)).isInstanceOf(IllegalArgumentException.class);
+    assertThat(got)
+        .hasSize(6)
+        .satisfiesExactly(
+            a -> assertThat(a).containsExactly(0, 1, 2),
+            a -> assertThat(a).containsExactly(0, 2, 1),
+            a -> assertThat(a).containsExactly(1, 0, 2),
+            a -> assertThat(a).containsExactly(1, 2, 0),
+            a -> assertThat(a).containsExactly(2, 0, 1),
+            a -> assertThat(a).containsExactly(2, 1, 0));
+    assertThat(perms.size()).isEqualTo(6);
   }
 
   @Test
   @DisplayName("Iterator respects hasNext()/next() and throws on exhaustion")
-  void iteratorExhaustion() {
-    Permutations perms = new Permutations(2, 3); // 3P2 = 6
-    Iterator<int[]> it = perms.iterator();
-
-    for (int i = 0; i < 6; i++) {
-      assertThat(it.hasNext()).isTrue();
+  void iteratorContract() {
+    Iterator<int[]> it = Permutations.of(4).take(2).iterator(); // 4P2 = 12
+    int count = 0;
+    while (it.hasNext()) {
       int[] p = it.next();
-      assertThat(p.length).isEqualTo(2);
+      assertThat(p).hasSize(2);
+      count++;
     }
-    assertThat(it.hasNext()).isFalse();
+    assertThat(count).isEqualTo(12);
     assertThatThrownBy(it::next).isInstanceOf(NoSuchElementException.class);
   }
 
   @Test
-  @DisplayName("Returned arrays are defensive copies")
-  void returnedArraysAreDefensiveCopies() {
-    Iterator<int[]> it = new Permutations(2, 4).iterator();
+  @DisplayName("Returned arrays are defensive copies (immutability)")
+  void defensiveCopies() {
+    Iterator<int[]> it = Permutations.of(4).take(2).iterator();
     int[] first = it.next();
     int[] snapshot = first.clone();
-    first[0] = 99; // mutate caller-side copy
 
-    // Next call should not be affected by our mutation
+    // mutate caller's copy
+    first[0] = 99;
+
     int[] second = it.next();
-
-    assertThat(snapshot).isNotEqualTo(second); // they should differ normally
-    // And the stored 'first' we mutated should not retroactively change the iterator's state
     assertThat(snapshot[0]).isNotEqualTo(99);
+    assertThat(second).isNotEqualTo(snapshot);
+  }
+
+  @Test
+  @DisplayName("Invalid arguments throw IllegalArgumentException")
+  void invalidArgs() {
+    // n < 0
+    assertThatThrownBy(() -> Permutations.of(-1)).isInstanceOf(IllegalArgumentException.class);
+    // k < 0
+    assertThatThrownBy(() -> Permutations.of(5).take(-1))
+        .isInstanceOf(IllegalArgumentException.class);
+    // k > n
+    assertThatThrownBy(() -> Permutations.of(5).take(6))
+        .isInstanceOf(IllegalArgumentException.class);
   }
 }

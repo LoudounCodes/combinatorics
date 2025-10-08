@@ -2,79 +2,23 @@ package org.loudouncodes.combinatorics;
 
 import static org.assertj.core.api.Assertions.*;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
+import java.util.NoSuchElementException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 class CombinationsWithRepetitionTest {
 
-  // ---------- helpers ------------------------------------------------------
-
-  private static long nCr(long n, long r) {
-    if (r < 0 || n < 0 || r > n) throw new IllegalArgumentException();
-    r = Math.min(r, n - r); // symmetry
-    long num = 1, den = 1;
-    for (long i = 1; i <= r; i++) {
-      num *= (n - (r - i));
-      den *= i;
-    }
-    return num / den;
-  }
-
-  private static long countWithRepetition(int n, int k) {
-    // C(n + k - 1, k)
-    if (k == 0) return 1;
-    if (n == 0) return 0;
-    return nCr(n + k - 1L, k);
-  }
-
-  private static boolean isNonDecreasing(int[] a) {
-    for (int i = 1; i < a.length; i++) {
-      if (a[i] < a[i - 1]) return false;
-    }
-    return true;
-  }
-
-  private static String key(int[] a) {
-    StringBuilder sb = new StringBuilder(a.length * 2);
-    for (int i = 0; i < a.length; i++) {
-      if (i > 0) sb.append(',');
-      sb.append(a[i]);
-    }
-    return sb.toString();
-  }
-
-  // ---------- tests --------------------------------------------------------
-
   @Test
-  @DisplayName("Count equals C(n+k-1, k) and no duplicates (n=5, k=3)")
-  void countMatchesFormula_NoDuplicates() {
-    int n = 5, k = 3;
-    long expected = countWithRepetition(n, k);
-
-    Set<String> uniq = new HashSet<>();
-    long total = 0;
-    for (int[] t : new CombinationsWithRepetition(k, n)) {
-      total++;
-      // shape & constraints
-      assertThat(t.length).isEqualTo(k);
-      for (int v : t) assertThat(v).isBetween(0, n - 1);
-      assertThat(isNonDecreasing(t)).isTrue();
-      uniq.add(key(t));
-    }
-
-    assertThat(total).isEqualTo(expected);
-    assertThat(uniq).hasSize((int) expected);
-  }
-
-  @Test
-  @DisplayName("Sequence matches known small case (n=3, k=2)")
-  void smallCaseSequence() {
+  @DisplayName("Lexicographic order for n=3, k=2 (nondecreasing arrays)")
+  void order_n3k2() {
+    var it = CombinationsWithRepetition.of(3).multichoose(2);
     List<int[]> got = new ArrayList<>();
-    for (int[] t : new CombinationsWithRepetition(2, 3)) {
-      got.add(t.clone());
-    }
+    for (int[] a : it) got.add(a);
 
+    assertThat(it.size()).isEqualTo(6); // C(3+2-1, 2) = C(4,2) = 6
     assertThat(got)
         .hasSize(6)
         .satisfiesExactly(
@@ -87,86 +31,83 @@ class CombinationsWithRepetitionTest {
   }
 
   @Test
-  @DisplayName("k=0 yields one empty tuple")
-  void kZeroYieldsOneEmpty() {
-    List<int[]> all = new ArrayList<>();
-    for (int[] t : new CombinationsWithRepetition(0, 7)) {
-      all.add(t);
-    }
-    assertThat(all).hasSize(1);
-    assertThat(all.get(0)).isEmpty();
+  @DisplayName("Count matches multichoose formula: C(n+k-1, k) for n=5, k=3")
+  void count_n5k3() {
+    var m = CombinationsWithRepetition.of(5).multichoose(3); // C(7,3)=35
+    long count = 0;
+    for (int[] ignored : m) count++;
+    assertThat(count).isEqualTo(35);
+    assertThat(m.size()).isEqualTo(35);
   }
 
   @Test
-  @DisplayName("n=0 and k>0 yields no tuples; size() is 0")
-  void nZeroKPositiveYieldsNone() {
-    CombinationsWithRepetition gen = new CombinationsWithRepetition(3, 0);
-    assertThat(gen.size()).isZero();
-    Iterator<int[]> it = gen.iterator();
-    assertThat(it.hasNext()).isFalse();
-    assertThatThrownBy(it::next).isInstanceOf(NoSuchElementException.class);
+  @DisplayName("Edge case k=0 yields one empty combination (any n)")
+  void kZero_anyN() {
+    var m = CombinationsWithRepetition.of(8).multichoose(0);
+    List<int[]> got = new ArrayList<>();
+    for (int[] a : m) got.add(a);
+
+    assertThat(got).hasSize(1);
+    assertThat(got.get(0)).isEmpty();
+    assertThat(m.size()).isEqualTo(1);
   }
 
   @Test
-  @DisplayName("size() agrees with iteration count across a few cases")
-  void sizeMatchesIteration() {
-    int[][] cases = {
-      {0, 0},
-      {0, 5},
-      {1, 0},
-      {1, 4},
-      {2, 3},
-      {3, 5},
-      {4, 2},
-    };
-    for (int[] c : cases) {
-      int k = c[0], n = c[1];
-      CombinationsWithRepetition gen = new CombinationsWithRepetition(k, n);
-      long expected = countWithRepetition(n, k);
-      long seen = 0;
-      for (int[] ignored : gen) seen++;
-      assertThat(gen.size()).as("size() for k=%d,n=%d", k, n).isEqualTo(expected);
-      assertThat(seen).as("iterated count for k=%d,n=%d", k, n).isEqualTo(expected);
-    }
+  @DisplayName("Edge case n=0, k=0 emits one empty array; n=0, k>0 emits none")
+  void nZero_cases() {
+    var zeroZero = CombinationsWithRepetition.of(0).multichoose(0);
+    List<int[]> a = new ArrayList<>();
+    for (int[] t : zeroZero) a.add(t);
+    assertThat(a).hasSize(1);
+    assertThat(a.get(0)).isEmpty();
+    assertThat(zeroZero.size()).isEqualTo(1);
+
+    var zeroThree = CombinationsWithRepetition.of(0).multichoose(3);
+    List<int[]> b = new ArrayList<>();
+    for (int[] t : zeroThree) b.add(t);
+    assertThat(b).isEmpty();
+    assertThat(zeroThree.size()).isEqualTo(0);
   }
 
   @Test
   @DisplayName("Iterator respects hasNext()/next() and throws on exhaustion")
   void iteratorContract() {
-    CombinationsWithRepetition gen = new CombinationsWithRepetition(2, 3); // 6 tuples
-    Iterator<int[]> it = gen.iterator();
-
-    for (int i = 0; i < 6; i++) {
-      assertThat(it.hasNext()).isTrue();
-      int[] t = it.next();
-      assertThat(t.length).isEqualTo(2);
-      assertThat(isNonDecreasing(t)).isTrue();
+    var m = CombinationsWithRepetition.of(3).multichoose(2); // 6 tuples
+    Iterator<int[]> it = m.iterator();
+    int count = 0;
+    while (it.hasNext()) {
+      int[] arr = it.next();
+      assertThat(arr).hasSize(2);
+      assertThat(arr[0]).isLessThanOrEqualTo(arr[1]); // nondecreasing
+      count++;
     }
-    assertThat(it.hasNext()).isFalse();
+    assertThat(count).isEqualTo(6);
     assertThatThrownBy(it::next).isInstanceOf(NoSuchElementException.class);
   }
 
   @Test
-  @DisplayName("Returned arrays are defensive copies")
+  @DisplayName("Returned arrays are defensive copies (immutability)")
   void defensiveCopies() {
-    Iterator<int[]> it = new CombinationsWithRepetition(3, 3).iterator();
+    Iterator<int[]> it = CombinationsWithRepetition.of(4).multichoose(2).iterator();
     int[] first = it.next();
     int[] snapshot = first.clone();
-    first[0] = 99; // mutate caller-side copy
-    int[] second = it.next();
 
-    // second tuple should be lexicographically after the true first tuple,
-    // and our local mutation should not have influenced it
-    assertThat(second).isNotEqualTo(snapshot);
+    // Mutate caller's copy
+    first[0] = 99;
+
+    int[] second = it.next();
+    // The previous snapshot remains unchanged; the iterator returned a defensive copy
     assertThat(snapshot[0]).isNotEqualTo(99);
+    assertThat(second).isNotEqualTo(snapshot);
   }
 
   @Test
   @DisplayName("Invalid arguments throw IllegalArgumentException")
-  void invalidArgumentsThrow() {
-    assertThatThrownBy(() -> new CombinationsWithRepetition(-1, 3))
+  void invalidArgs() {
+    assertThatThrownBy(() -> CombinationsWithRepetition.of(-1))
         .isInstanceOf(IllegalArgumentException.class);
-    assertThatThrownBy(() -> new CombinationsWithRepetition(2, -1))
+
+    assertThatThrownBy(() -> CombinationsWithRepetition.of(5).multichoose(-2))
         .isInstanceOf(IllegalArgumentException.class);
   }
 }

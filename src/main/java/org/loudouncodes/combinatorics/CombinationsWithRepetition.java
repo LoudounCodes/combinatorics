@@ -4,170 +4,124 @@ import java.util.Iterator;
 import java.util.NoSuchElementException;
 
 /**
- * Generates all {@code k}-combinations <em>with repetition</em> (a.k.a. multisets) from the integer
- * domain {@code {0, 1, ..., n-1}} and exposes them via Java's enhanced {@code for} loop by
- * implementing {@link Iterable}{@code <int[]>}.
+ * Fluent API for generating {@code k}-combinations <em>with repetition</em> from the
+ * domain {@code {0,1,...,n-1}}. These are nondecreasing {@code int[]} arrays of length {@code k}.
  *
- * <h2>What is a combination with repetition?</h2>
- *
- * <p>We choose {@code k} elements from {@code n} types, allowing repeats, and where order does not
- * matter. We represent each multiset as a <strong>non-decreasing</strong> array of indices of
- * length {@code k}. For example, with {@code n = 3} and {@code k = 2}, the outputs are:
- *
+ * <p>Usage:</p>
  * <pre>{@code
- * [0,0], [0,1], [0,2], [1,1], [1,2], [2,2]
- * }</pre>
- *
- * <h2>Order of generation</h2>
- *
- * <p>Arrays are produced in <strong>lexicographic order</strong> subject to the non-decreasing
- * constraint. The first array is {@code [0,0,...,0]} and the last is {@code [n-1, n-1, ..., n-1]}.
- *
- * <h2>How many are there? (Stars and Bars)</h2>
- *
- * <p>The number of multisets is the binomial coefficient {@code C(n + k - 1, k)}. This is available
- * via {@link #size()}.
- *
- * <h2>Algorithm (lexicographic successor under non-decreasing constraint)</h2>
- *
- * <p>Maintain the current array {@code a[0..k-1]} (non-decreasing). To advance:
- *
- * <ol>
- *   <li>Scan from right to left for the first position {@code i} where {@code a[i] < n-1}.
- *   <li>If no such {@code i} exists, we are done.
- *   <li>Increment {@code a[i]++}, then set all suffix positions {@code a[i+1..k-1]} equal to {@code
- *       a[i]} (this keeps the sequence non-decreasing and lexicographically minimal).
- * </ol>
- *
- * <h3>Correctness intuition</h3>
- *
- * <ul>
- *   <li><strong>Exhaustiveness:</strong> Starting at {@code [0,0,...,0]} and repeatedly applying
- *       the successor rule enumerates every non-decreasing {@code k}-tuple until we reach {@code
- *       [n-1,...,n-1]}.
- *   <li><strong>No duplicates:</strong> The successor is deterministic and strictly increases in
- *       lexicographic order.
- *   <li><strong>Ordering:</strong> We always bump the rightmost possible position and minimize the
- *       suffix, yielding standard lexicographic order subject to the constraint.
- * </ul>
- *
- * <h2>Complexity</h2>
- *
- * <ul>
- *   <li><strong>Time per tuple:</strong> {@code O(k)} (short right-to-left scan and suffix reset).
- *   <li><strong>Total tuples:</strong> {@code C(n + k - 1, k)} — see {@link #size()}.
- *   <li><strong>Space:</strong> {@code O(k)} internal state. Each call to {@link
- *       java.util.Iterator#next() Iterator.next()} returns a <em>defensive copy</em> so callers can
- *       safely mutate their copy without affecting iteration.
- * </ul>
- *
- * <h2>Edge cases</h2>
- *
- * <ul>
- *   <li>{@code k == 0}: a single empty array {@code []} is emitted.
- *   <li>{@code n == 0}: emits nothing unless {@code k == 0} (there are no elements to choose).
- *   <li>Invalid inputs (negative {@code n} or {@code k}) throw {@link IllegalArgumentException}.
- * </ul>
- *
- * <h2>Example</h2>
- *
- * <pre>{@code
- * CombinationsWithRepetition m = new CombinationsWithRepetition(2, 3);
- * System.out.println("Total: " + m.size()); // prints C(3+2-1, 2) = C(4,2) = 6
- * for (int[] t : m) {
- *     System.out.printf("[%d,%d]%n", t[0], t[1]);
+ * for (int[] m : CombinationsWithRepetition.of(5).multichoose(3)) {
+ *   // e.g. [0,0,0], [0,0,1], [0,0,2], ..., [2,4,4], [3,4,4], [4,4,4]
  * }
  * }</pre>
  *
- * <p><strong>Implementation note:</strong> Each {@link java.util.Iterator#next() next()} clones the
- * internal array to preserve iterator integrity.
+ * <h2>Order of generation</h2>
+ * <p>Lexicographic over nondecreasing arrays. Start at {@code [0,0,...,0]} and advance by
+ * bumping the rightmost position that can increase (i.e., {@code < n-1}) and setting the suffix
+ * equal to the new value to keep the tuple nondecreasing.</p>
  *
- * @since 0.1.0
+ * <h2>Counting</h2>
+ * <p>Total count is the multiset coefficient:
+ * {@code C(n+k-1, k)} (also written as {@code (n multichoose k)}).</p>
+ *
+ * <h2>Edge cases</h2>
+ * <ul>
+ *   <li>{@code k == 0}: emits one empty array {@code []}.</li>
+ *   <li>{@code n == 0}: emits one empty array iff {@code k == 0}; otherwise emits nothing.</li>
+ *   <li>Invalid inputs (negative) throw {@link IllegalArgumentException}.</li>
+ * </ul>
+ *
+ * @since 0.2.0
  */
-public class CombinationsWithRepetition implements Iterable<int[]> {
-  private final int n;
-  private final int k;
+public final class CombinationsWithRepetition {
+
+  private CombinationsWithRepetition() {}
 
   /**
-   * Constructs a generator of {@code k}-combinations with repetition from {@code {0..n-1}}.
+   * Creates a builder for multichoose selections from {@code {0..n-1}}.
    *
-   * @param k multiset size (must satisfy {@code k >= 0})
-   * @param n number of distinct element types (must satisfy {@code n >= 0})
-   * @throws IllegalArgumentException if {@code k < 0} or {@code n < 0}
+   * @param n domain size (must be {@code >= 0})
+   * @return builder bound to {@code n}
+   * @throws IllegalArgumentException if {@code n < 0}
    */
-  public CombinationsWithRepetition(int k, int n) {
-    if (k < 0 || n < 0) {
-      throw new IllegalArgumentException("Require n >= 0 and k >= 0");
+  public static Builder of(int n) {
+    if (n < 0) throw new IllegalArgumentException("n must be >= 0");
+    return new Builder(n);
+  }
+
+  /** Builder capturing the domain size {@code n}. */
+  public static final class Builder {
+    private final int n;
+    private Builder(int n) { this.n = n; }
+
+    /**
+     * Returns an iterable over all size-{@code k} combinations with repetition allowed
+     * (nondecreasing {@code int[]} arrays).
+     *
+     * @param k selection size (must be {@code >= 0})
+     * @return iterable view over multiset combinations
+     * @throws IllegalArgumentException if {@code k < 0}
+     */
+    public KMultiChoose multichoose(int k) {
+      if (k < 0) throw new IllegalArgumentException("k must be >= 0");
+      return new KMultiChoose(k, n);
     }
-    this.k = k;
-    this.n = n;
   }
 
   /**
-   * Returns the total number of {@code k}-combinations with repetition of {@code n} items. This is
-   * the binomial coefficient {@code C(n + k - 1, k)}.
-   *
-   * <p>Note: this uses {@code long} and will overflow for large inputs. For classroom-scale values
-   * it is typically fine. For arbitrary precision, supply a {@code BigInteger} variant.
-   *
-   * @return {@code C(n + k - 1, k)} as a {@code long}
+   * Iterable view of all {@code k}-combinations with repetition from {@code {0..n-1}}.
+   * Emits nondecreasing arrays in lexicographic order and provides {@link #size()}.
    */
-  public long size() {
-    // Handle cases where the count is 0 or 1 quickly.
-    if (k == 0) return 1L;
-    if (n == 0) return 0L; // no elements to choose from unless k==0
+  public static final class KMultiChoose implements Iterable<int[]> {
+    private final int k, n;
 
-    // Compute C(n+k-1, k) iteratively: product_{i=1..k} (n + i - 1)/i
-    return binomial(n + k - 1, k);
-  }
-
-  /** Helper to compute {@code C(N,K)} using integer arithmetic with symmetry. */
-  private static long binomial(int N, int K) {
-    if (K < 0 || K > N) return 0L;
-    K = Math.min(K, N - K);
-    long res = 1L;
-    for (int i = 1; i <= K; i++) {
-      res = (res * (N - (K - i))) / i;
+    private KMultiChoose(int k, int n) {
+      this.k = k; this.n = n;
     }
-    return res;
+
+    /**
+     * Count = {@code C(n+k-1, k)} computed multiplicatively into a {@code long}.
+     * For large inputs this may overflow; intended for classroom-scale values.
+     */
+    public long size() {
+      if (k == 0) return 1L;
+      if (n == 0) return 0L; // unless k==0, handled above
+      // Compute C(n+k-1, k) = Π_{i=1..k} (n-1+i)/i
+      long res = 1L;
+      for (int i = 1; i <= k; i++) {
+        res = (res * (long) (n - 1 + i)) / i;
+      }
+      return res;
+    }
+
+    @Override
+    public Iterator<int[]> iterator() {
+      return new WithRepIterator(k, n);
+    }
   }
 
   /**
-   * Returns a fresh iterator positioned at the first non-decreasing tuple {@code [0,0,...,0]} (or
-   * the empty array if {@code k == 0}). If {@code n == 0} and {@code k > 0}, the iterator is empty.
-   *
-   * @return iterator over lexicographically ordered non-decreasing {@code k}-tuples
-   */
-  @Override
-  public Iterator<int[]> iterator() {
-    return new WithRepIterator(k, n);
-  }
-
-  /**
-   * Iterator implementing the lexicographic-successor algorithm under the non-decreasing
-   * constraint.
-   *
-   * <p>State invariant: {@code 0 <= a[0] <= a[1] <= ... <= a[k-1] <= n-1}.
+   * Iterator over nondecreasing {@code k}-tuples in lexicographic order.
+   * State invariant: {@code 0 <= cur[0] <= cur[1] <= ... <= cur[k-1] < n}.
    */
   private static final class WithRepIterator implements Iterator<int[]> {
-    private final int n;
-    private final int k;
-    private final int[] a; // current non-decreasing k-tuple
+    private final int k, n;
+    private final int[] cur;
     private boolean hasNext;
 
     WithRepIterator(int k, int n) {
       this.k = k;
       this.n = n;
+
       if (k == 0) {
-        this.a = new int[0];
-        this.hasNext = true; // single empty tuple
+        this.cur = new int[0];
+        this.hasNext = true; // one empty tuple
       } else if (n == 0) {
-        this.a = new int[0];
+        this.cur = new int[0];
         this.hasNext = false; // no tuples when n==0 and k>0
       } else {
-        this.a = new int[k];
-        // start at [0,0,...,0]
-        for (int i = 0; i < k; i++) a[i] = 0;
+        this.cur = new int[k];
+        // Start at [0,0,...,0]
+        for (int i = 0; i < k; i++) cur[i] = 0;
         this.hasNext = true;
       }
     }
@@ -177,48 +131,37 @@ public class CombinationsWithRepetition implements Iterable<int[]> {
       return hasNext;
     }
 
-    /**
-     * Returns the current tuple and advances to the next non-decreasing tuple in lexicographic
-     * order.
-     *
-     * @return a defensive copy of the current {@code int[]} tuple
-     * @throws NoSuchElementException if the iterator is exhausted
-     */
     @Override
     public int[] next() {
       if (!hasNext) throw new NoSuchElementException();
-
-      int[] out = a.clone(); // defensive copy for caller
-
-      // Advance to next tuple: bump rightmost position that can increase (< n-1),
-      // then set the suffix to that new value to stay non-decreasing and minimal.
-      int i = k - 1;
-      while (i >= 0 && a[i] == n - 1) {
-        i--;
-      }
-      if (i < 0) {
-        hasNext = false; // we were at [n-1, n-1, ..., n-1]
-      } else {
-        a[i]++;
-        for (int j = i + 1; j < k; j++) {
-          a[j] = a[i];
-        }
-      }
-
+      int[] out = cur.clone(); // defensive copy
+      hasNext = advance();
       return out;
+    }
+
+    /** Bump rightmost position that can increase; set suffix equal to that new value. */
+    private boolean advance() {
+      if (k == 0) return false; // already emitted single empty tuple
+      // Find rightmost i such that cur[i] < n-1
+      int i = k - 1;
+      while (i >= 0 && cur[i] == n - 1) i--;
+      if (i < 0) return false; // exhausted (was [n-1,...,n-1])
+
+      cur[i]++;                 // bump this position
+      int v = cur[i];
+      for (int j = i + 1; j < k; j++) {
+        cur[j] = v;             // keep nondecreasing by filling suffix with same value
+      }
+      return true;
     }
   }
 
-  /**
-   * Small demo for quick sanity checks.
-   *
-   * @param args ignored
-   */
+  /** Small demo. */
   public static void main(String[] args) {
-    CombinationsWithRepetition m = new CombinationsWithRepetition(2, 3);
-    System.out.println("Total: " + m.size()); // 6
-    for (int[] t : m) {
-      System.out.printf("[%d,%d]%n", t[0], t[1]);
+    var m = CombinationsWithRepetition.of(3).multichoose(2); // n=3 -> {0,1,2}, k=2
+    System.out.println("C(3+2-1,2) = " + m.size()); // 6
+    for (int[] a : m) {
+      System.out.println(java.util.Arrays.toString(a));
     }
   }
 }

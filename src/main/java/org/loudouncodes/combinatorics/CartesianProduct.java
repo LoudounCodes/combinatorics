@@ -1,127 +1,134 @@
 package org.loudouncodes.combinatorics;
 
+import java.util.Arrays;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
 import java.util.Objects;
 
 /**
- * Generates the Cartesian product of multiple domains, each defined by its size, and exposes the
- * tuples via Java's enhanced {@code for} loop by implementing {@link Iterable}{@code <int[]>}.
+ * Fluent API for generating tuples from a mixed-radix Cartesian product.
  *
- * <h2>What is the Cartesian product?</h2>
+ * <p>Given non-negative dimensions {@code d[0], d[1], ..., d[m-1]}, this iterable yields every
+ * {@code m}-length tuple {@code t} such that {@code 0 <= t[i] < d[i]} for each coordinate.</p>
  *
- * <p>Given {@code k} sets (domains) {@code A_0, A_1, ..., A_{k-1}}, their Cartesian product is the
- * set of ordered tuples {@code (a0, a1, ..., a_{k-1})} where {@code ai ∈ A_i}. For example:
- *
+ * <h2>Usage</h2>
  * <pre>{@code
- * {0,1} × {a,b} = {(0,a), (0,b), (1,a), (1,b)}
- * }</pre>
- *
- * <h2>Usage in code</h2>
- *
- * <pre>{@code
- * // Two domains: {0,1} and {0,1,2}
- * CartesianProduct cp = new CartesianProduct(2, 3);
- * for (int[] tuple : cp) {
- *     System.out.println(Arrays.toString(tuple));
+ * // 3 attributes, each with 3 values (e.g., a SET card): 3^3 = 27 tuples
+ * for (int[] t : CartesianProduct.of(3, 3, 3)) {
+ *   System.out.println(Arrays.toString(t));
  * }
- * // prints:
- * // [0, 0]
- * // [0, 1]
- * // [0, 2]
- * // [1, 0]
- * // [1, 1]
- * // [1, 2]
+ *
+ * // Combine with IndexingAdapter to map indices to real objects per coordinate:
+ * // Suppose suits = ["♠","♥"], ranks = ["A","K","Q"], colors = ["Black","Red"]
+ * // Then dims = [suits.size(), ranks.size(), colors.size()] = [2,3,2]
  * }</pre>
  *
- * <h2>Design</h2>
+ * <h2>Order of generation</h2>
+ * <p>Lexicographic with the <em>rightmost</em> coordinate varying fastest (odometer behavior).
+ * Start at {@code [0,0,...,0]}, then repeatedly increment the last position; on overflow, carry
+ * left and reset trailing positions to 0.</p>
  *
- * <ul>
- *   <li>The constructor takes an array of domain sizes. For example, {@code new
- *       CartesianProduct(2,3,4)} means the first coordinate ranges over {@code 0..1}, the second
- *       over {@code 0..2}, the third over {@code 0..3}.
- *   <li>Each emitted {@code int[]} is a defensive copy so callers may mutate without affecting the
- *       iterator.
- *   <li>Tuples are generated in lexicographic order with the leftmost index changing slowest, like
- *       nested loops.
- * </ul>
- *
- * <h2>Complexity</h2>
- *
- * <ul>
- *   <li><strong>Time:</strong> proportional to the product of domain sizes (the total number of
- *       tuples).
- *   <li><strong>Space:</strong> {@code O(k)} for the current tuple.
- * </ul>
+ * <h2>Counting</h2>
+ * <p>Total tuples = {@code Π dims[i]}.</p>
  *
  * <h2>Edge cases</h2>
- *
  * <ul>
- *   <li>If any size is zero, the Cartesian product is empty.
- *   <li>If no sizes are provided (zero dimensions), the Cartesian product has exactly one element:
- *       the empty tuple {@code []}.
+ *   <li>No dimensions (i.e., {@code of()}): one empty tuple {@code []}.</li>
+ *   <li>If any dimension is zero and there is at least one dimension, the product is empty.</li>
+ *   <li>Negative dimensions are rejected with {@link IllegalArgumentException}.</li>
  * </ul>
  *
- * @since 0.1.0
+ * <p><strong>Implementation note:</strong> Each {@link java.util.Iterator#next() Iterator.next()}
+ * returns a defensive copy to protect the iterator's state.</p>
+ *
+ * @since 0.2.0
  */
-public final class CartesianProduct implements Iterable<int[]> {
+public final class CartesianProduct {
 
-  private final int[] sizes;
+  private CartesianProduct() {}
 
   /**
-   * Constructs a Cartesian product generator.
+   * Creates an iterable over the Cartesian product of the given non-negative dimensions.
    *
-   * @param sizes array of domain sizes (each ≥ 0)
-   * @throws IllegalArgumentException if any size is negative
+   * @param dims non-null array of dimensions; each {@code dims[i] >= 0}
+   * @return a sized iterable over all tuples
+   * @throws NullPointerException if {@code dims} is null
+   * @throws IllegalArgumentException if any dimension is negative
    */
-  public CartesianProduct(int... sizes) {
-    Objects.requireNonNull(sizes, "sizes");
-    for (int s : sizes) {
-      if (s < 0) {
-        throw new IllegalArgumentException("Sizes must be nonnegative");
+  public static Product of(int... dims) {
+    Objects.requireNonNull(dims, "dims");
+    for (int d : dims) {
+      if (d < 0) throw new IllegalArgumentException("All dimensions must be >= 0, got " + d);
+    }
+    // Defensive copy so future external changes to the passed array don't affect us
+    int[] copy = Arrays.copyOf(dims, dims.length);
+    return new Product(copy);
+  }
+
+  /**
+   * Iterable view of the Cartesian product for fixed dimensions. Provides {@link #size()} and
+   * supports enhanced-for iteration.
+   */
+  public static final class Product implements Iterable<int[]> {
+    private final int[] dims;
+
+    private Product(int[] dims) {
+      this.dims = dims;
+    }
+
+    /**
+     * Number of tuples = product of dimensions. Returns 0 if any dimension is 0 (and there is
+     * at least one dimension). If there are no dimensions, returns 1 (the empty tuple).
+     *
+     * <p>Note: This may overflow for large inputs; intended for classroom-scale values.</p>
+     */
+    public long size() {
+      if (dims.length == 0) return 1L;
+      long prod = 1L;
+      for (int d : dims) {
+        if (d == 0) return 0L;
+        prod *= d;
       }
+      return prod;
     }
-    this.sizes = sizes.clone();
+
+    @Override
+    public Iterator<int[]> iterator() {
+      return new CartesianIterator(dims);
+    }
   }
 
   /**
-   * Returns the total number of tuples in the Cartesian product.
-   *
-   * <p>This is the product of all domain sizes, returned as a {@code long}. For larger inputs it
-   * may overflow; in that case consider using {@code java.math.BigInteger} in a separate
-   * implementation.
-   *
-   * @return total number of tuples
+   * Mixed-radix odometer iterator. State {@code cur} starts at all zeros and increments with carries.
+   * Invariant: for each i, {@code 0 <= cur[i] < dims[i]}.
    */
-  public long size() {
-    long result = 1L;
-    for (int s : sizes) {
-      result *= s;
-    }
-    return result;
-  }
-
-  @Override
-  public Iterator<int[]> iterator() {
-    return new CartesianIterator(sizes);
-  }
-
-  /** Iterator that enumerates tuples in lexicographic order. */
   private static final class CartesianIterator implements Iterator<int[]> {
-    private final int[] sizes;
-    private final int[] current;
+    private final int[] dims;
+    private final int m;         // number of coordinates
+    private final int[] cur;     // current tuple
     private boolean hasNext;
 
-    CartesianIterator(int[] sizes) {
-      this.sizes = sizes.clone();
-      this.current = new int[sizes.length];
-      this.hasNext = true;
+    CartesianIterator(int[] dims) {
+      this.dims = dims;
+      this.m = dims.length;
 
-      // If any size is zero, mark empty immediately
-      for (int s : sizes) {
-        if (s == 0) {
-          hasNext = false;
-          break;
+      if (m == 0) {
+        // Single empty tuple
+        this.cur = new int[0];
+        this.hasNext = true;
+      } else {
+        // If any dimension is 0 -> empty product
+        boolean empty = false;
+        for (int d : dims) {
+          if (d == 0) { empty = true; break; }
+        }
+        if (empty) {
+          this.cur = new int[0];
+          this.hasNext = false;
+        } else {
+          this.cur = new int[m];
+          Arrays.fill(this.cur, 0);
+          this.hasNext = true;
         }
       }
     }
@@ -133,40 +140,39 @@ public final class CartesianProduct implements Iterable<int[]> {
 
     @Override
     public int[] next() {
-      if (!hasNext) {
-        throw new NoSuchElementException();
-      }
-
-      // Defensive copy of current tuple
-      int[] out = current.clone();
-
-      // Advance like an odometer: rightmost index increments fastest
-      for (int pos = sizes.length - 1; pos >= 0; pos--) {
-        current[pos]++;
-        if (current[pos] < sizes[pos]) {
-          // still in range, stop incrementing
-          return out;
-        }
-        // carry over
-        current[pos] = 0;
-      }
-
-      // If we carried past the leftmost position, we’re done
-      hasNext = false;
+      if (!hasNext) throw new NoSuchElementException();
+      int[] out = cur.clone(); // defensive copy
+      advance();
       return out;
+    }
+
+    /** Increment the mixed-radix number in {@code cur} with bases {@code dims}. */
+    private void advance() {
+      if (m == 0) { // emitted the single empty tuple
+        hasNext = false;
+        return;
+      }
+      for (int i = m - 1; i >= 0; i--) {
+        cur[i]++;
+        if (cur[i] < dims[i]) {
+          // no carry; done
+          return;
+        } else {
+          // carry; reset this position and continue left
+          cur[i] = 0;
+        }
+      }
+      // overflowed past the most significant digit -> exhausted
+      hasNext = false;
     }
   }
 
-  /**
-   * Small demo.
-   *
-   * @param args ignored
-   */
+  /** Simple demo. */
   public static void main(String[] args) {
-    CartesianProduct cp = new CartesianProduct(2, 3);
-    System.out.println("Total: " + cp.size());
-    for (int[] tuple : cp) {
-      System.out.println(java.util.Arrays.toString(tuple));
+    CartesianProduct.Product p = CartesianProduct.of(2, 3); // 2×3 = 6
+    System.out.println("size = " + p.size());
+    for (int[] t : p) {
+      System.out.println(Arrays.toString(t));
     }
   }
 }
