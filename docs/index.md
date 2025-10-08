@@ -11,6 +11,7 @@
   `PowerSet.of(4)` → all subsets of `{0..3}`
 * **Safe for classrooms.** Iterators are lazy, deterministic, validate arguments, and return **defensive copies** so student code can’t accidentally mutate iterator state.
 * **Built-in counts.** Most views expose `size()`/`sizeExact()` so you can discuss *how many* without enumerating.
+* **Minimal-change orders when useful.** Combinations can be enumerated in **Gray order** (successive k-subsets differ by exactly one element in/out).
 
 ---
 
@@ -19,15 +20,19 @@
 A **fluent API** is a style where you *chain* method calls so code reads like a sentence:
 
 ```java
-Combinations.of(12).choose(3)        // “choose 3 from 12 (no repetition)”
+Combinations.of(12).choose(3)                 // “choose 3 from 12 (no repetition)”
+Combinations.of(8).choose(3).inGrayOrder()    // “same set, but Gray (minimal-change) order”
 Combinations.of(6).withRepetition().choose(4) // “choose 4 from 6 with repetition”
-Permutations.of(5).take(3)           // “take ordered 3-tuples without repetition”
-PowerSet.of(5)                        // “all subsets of a 5-element set”
-CartesianProduct.of(2,3,2)           // “mixed-radix tuples with dims 2×3×2”
-Derangements.of(5).all()             // “all permutations with no fixed points”
-```
+Permutations.of(5).take(3)                    // “take ordered 3-tuples without repetition”
+PowerSet.of(5)                                 // “all subsets of a 5-element set”
+CartesianProduct.of(2,3,2)                    // “mixed-radix tuples with dims 2×3×2”
+Derangements.of(5).all()                      // “all permutations with no fixed points”
+````
 
 Each call returns an **iterable view** of `int[]` index tuples (e.g., `[0,2,5]`). Use `IndexingAdapter` to map those indices onto real objects like strings, cards, toppings, etc.
+
+> **What is Gray order for combinations?**
+> For `Combinations.of(n).choose(k).inGrayOrder()`, consecutive k-subsets differ by toggling exactly one element (one leaves, one enters). You get the **same combinations** as lexicographic order, just in a minimal-change sequence—handy for animations, incremental updates, or bitset diffs.
 
 ---
 
@@ -47,48 +52,50 @@ public class PizzaDemo {
 
     int n = toppings.size();
 
-    // 1) 3-topping pizzas (no repetition)
-    var combos = Combinations.of(n).choose(3); // default: without repetition
-    var pizzas = new IndexingAdapter<>(combos, toppings);
-    System.out.println("Three-topping pizzas (no rep):");
-    for (var pizza : pizzas) {
-      System.out.println(pizza);
-    }
-    // If your Combinations view exposes counts:
-    // System.out.println("Total: " + combos.size());      // long
-    // System.out.println("Exact: " + combos.sizeExact()); // BigInteger
+    // 1) 3-topping pizzas (no repetition, lexicographic)
+    var combosLex = Combinations.of(n).choose(3);
+    var pizzasLex = new IndexingAdapter<>(combosLex, toppings);
+    System.out.println("Three-topping pizzas (lex order):");
+    for (var pizza : pizzasLex) System.out.println(pizza);
 
-    // 2) 3 scoops from 6 flavors (with repetition — like ice cream)
+    // 2) Same combinations but in Gray (minimal-change) order
+    var combosGray = Combinations.of(n).choose(3).inGrayOrder();
+    var pizzasGray = new IndexingAdapter<>(combosGray, toppings);
+    System.out.println("\nThree-topping pizzas (Gray order):");
+    for (var pizza : pizzasGray) System.out.println(pizza);
+
+    // 3) 3 scoops from 6 flavors (with repetition — like ice cream)
     var scoops = Combinations.of(6).withRepetition().choose(3);
     System.out.println("\nThree scoops from 6 flavors (with repetition):");
-    for (int[] pick : scoops) {
-      // pick is nondecreasing indices such as [0,0,2]
-      System.out.println(java.util.Arrays.toString(pick));
-    }
+    for (int[] pick : scoops) System.out.println(java.util.Arrays.toString(pick));
   }
 }
 ```
 
 **What’s going on?**
 
-* `Combinations.of(n).choose(k)` yields k-element index sets like `[0,4,7]`.
-* `IndexingAdapter<>(Iterable<int[]>, List<E>)` turns those indices into real lists (here, lists of topping names).
+* `Combinations.of(n).choose(k)` yields k-element index sets like `[0,4,7]` in lexicographic order.
+* `…choose(k).inGrayOrder()` yields the **same** k-subsets in minimal-change order (one index toggled per step).
+* `IndexingAdapter<>(Iterable<int[]>, List<E>)` turns those indices into real lists (here, topping names).
 * With repetition, you’ll see **nondecreasing** arrays (e.g., `[0,0,2]`).
 
 ---
 
 ## Core building blocks (at a glance)
 
-| Concept                 | Fluent entry                                    | Returns             | Notes                                       |
-| ----------------------- | ----------------------------------------------- | ------------------- | ------------------------------------------- |
-| Combinations (no rep)   | `Combinations.of(n).choose(k)`                  | `Iterable<int[]>`   | Lexicographic order; `size()` = C(n,k)      |
-| Combinations (with rep) | `Combinations.of(n).withRepetition().choose(k)` | `Iterable<int[]>`   | Nondecreasing arrays; `size()` = C(n+k−1,k) |
-| Permutations (k-tuples) | `Permutations.of(n).take(k)`                    | `Iterable<int[]>`   | Lexicographic; `size()` = P(n,k)            |
-| Derangements            | `Derangements.of(n).all()`                      | `Iterable<int[]>`   | No fixed points; `size()` = subfactorial    |
-| Power set               | `PowerSet.of(n)`                                | `Iterable<int[]>`   | Size-then-lex order; `count()` = 2^n        |
-| Cartesian product       | `CartesianProduct.of(d0,d1,...)`                | `Iterable<int[]>`   | Rightmost coordinate varies fastest         |
-| Index → object          | `new IndexingAdapter<>(tuples, data)`           | `Iterable<List<E>>` | Defensive copies each step                  |
-| (Optional) Gray codes   | `BinaryGray.of(n).asBits()`                     | `Iterable<int[]>`   | Minimal-change sequences for demos          |
+| Concept                         | Fluent entry                                    | Returns             | Notes                                                            |
+| ------------------------------- | ----------------------------------------------- | ------------------- | ---------------------------------------------------------------- |
+| Combinations (no rep, **lex**)  | `Combinations.of(n).choose(k)`                  | `Iterable<int[]>`   | Lexicographic order; `size()` = C(n,k)                           |
+| Combinations (no rep, **Gray**) | `Combinations.of(n).choose(k).inGrayOrder()`    | `Iterable<int[]>`   | **Minimal-change** sequence (same set as lex); `size()` = C(n,k) |
+| Combinations (with repetition)  | `Combinations.of(n).withRepetition().choose(k)` | `Iterable<int[]>`   | Nondecreasing arrays; `size()` = C(n+k−1,k)                      |
+| Permutations (k-tuples)         | `Permutations.of(n).take(k)`                    | `Iterable<int[]>`   | Lexicographic; `size()` = P(n,k)                                 |
+| Derangements                    | `Derangements.of(n).all()`                      | `Iterable<int[]>`   | No fixed points; `size()` = subfactorial                         |
+| Power set                       | `PowerSet.of(n)`                                | `Iterable<int[]>`   | Size-then-lex order; `count()` = 2^n                             |
+| Cartesian product               | `CartesianProduct.of(d0,d1,...)`                | `Iterable<int[]>`   | Rightmost coordinate varies fastest                              |
+| Index → object                  | `new IndexingAdapter<>(tuples, data)`           | `Iterable<List<E>>` | Defensive copies each step                                       |
+| Binary Gray codes (bitstrings)  | `BinaryGray.of(n).asBits()`                     | `Iterable<int[]>`   | Minimal-change bit patterns (for demos and visualizations)       |
+
+> **Availability:** Gray order is provided for **combinations without repetition**. (With-repetition uses lexicographic nondecreasing tuples.)
 
 ---
 
@@ -120,5 +127,6 @@ public class PizzaDemo {
 ### Tips for students
 
 * The library works over **indices** (`int[]`) so you can remap to any domain (names, cards, colors) using `IndexingAdapter`.
+* **Gray order tip:** when you need to update a running total or bitset per step, Gray-order combinations let you apply a constant-time “remove one / add one” change.
 * When in doubt about how many results you’ll get, call `size()` or `sizeExact()` first.
 * If you see an exception, read it—it’s usually an input check doing you a favor (e.g., `k > n` without repetition).
