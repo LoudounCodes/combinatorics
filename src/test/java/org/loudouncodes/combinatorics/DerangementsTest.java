@@ -100,8 +100,7 @@ class DerangementsTest {
   @Test
   @DisplayName("Invalid arguments throw IllegalArgumentException")
   void invalidArgs() {
-    assertThatThrownBy(() -> Derangements.of(-1))
-        .isInstanceOf(IllegalArgumentException.class);
+    assertThatThrownBy(() -> Derangements.of(-1)).isInstanceOf(IllegalArgumentException.class);
   }
 
   @Test

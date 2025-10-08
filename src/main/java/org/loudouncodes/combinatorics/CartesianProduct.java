@@ -1,5 +1,6 @@
 package org.loudouncodes.combinatorics;
 
+import java.math.BigInteger;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
@@ -9,9 +10,10 @@ import java.util.Objects;
  * Fluent API for generating tuples from a mixed-radix Cartesian product.
  *
  * <p>Given non-negative dimensions {@code d[0], d[1], ..., d[m-1]}, this iterable yields every
- * {@code m}-length tuple {@code t} such that {@code 0 <= t[i] < d[i]} for each coordinate.</p>
+ * {@code m}-length tuple {@code t} such that {@code 0 <= t[i] < d[i]} for each coordinate.
  *
  * <h2>Usage</h2>
+ *
  * <pre>{@code
  * // 3 attributes, each with 3 values (e.g., a SET card): 3^3 = 27 tuples
  * for (int[] t : CartesianProduct.of(3, 3, 3)) {
@@ -24,22 +26,25 @@ import java.util.Objects;
  * }</pre>
  *
  * <h2>Order of generation</h2>
+ *
  * <p>Lexicographic with the <em>rightmost</em> coordinate varying fastest (odometer behavior).
  * Start at {@code [0,0,...,0]}, then repeatedly increment the last position; on overflow, carry
- * left and reset trailing positions to 0.</p>
+ * left and reset trailing positions to 0.
  *
  * <h2>Counting</h2>
- * <p>Total tuples = {@code Π dims[i]}.</p>
+ *
+ * <p>Total tuples = {@code Π dims[i]}.
  *
  * <h2>Edge cases</h2>
+ *
  * <ul>
- *   <li>No dimensions (i.e., {@code of()}): one empty tuple {@code []}.</li>
- *   <li>If any dimension is zero and there is at least one dimension, the product is empty.</li>
- *   <li>Negative dimensions are rejected with {@link IllegalArgumentException}.</li>
+ *   <li>No dimensions (i.e., {@code of()}): one empty tuple {@code []}.
+ *   <li>If any dimension is zero and there is at least one dimension, the product is empty.
+ *   <li>Negative dimensions are rejected with {@link IllegalArgumentException}.
  * </ul>
  *
  * <p><strong>Implementation note:</strong> Each {@link java.util.Iterator#next() Iterator.next()}
- * returns a defensive copy to protect the iterator's state.</p>
+ * returns a defensive copy to protect the iterator's state.
  *
  * @since 0.2.0
  */
@@ -77,10 +82,12 @@ public final class CartesianProduct {
     }
 
     /**
-     * Number of tuples = product of dimensions. Returns 0 if any dimension is 0 (and there is
-     * at least one dimension). If there are no dimensions, returns 1 (the empty tuple).
+     * Number of tuples = product of dimensions. Returns 0 if any dimension is 0 (and there is at
+     * least one dimension). If there are no dimensions, returns 1 (the empty tuple).
      *
-     * <p>Note: This may overflow for large inputs; intended for classroom-scale values.</p>
+     * <p>Note: This may overflow for large inputs; intended for classroom-scale values.
+     *
+     * @return the number of tuples in this Cartesian product
      */
     public long size() {
       if (dims.length == 0) return 1L;
@@ -92,6 +99,21 @@ public final class CartesianProduct {
       return prod;
     }
 
+    /**
+     * Exact number of tuples = product of dimensions.
+     *
+     * @return exact count as a {@link BigInteger}
+     */
+    public BigInteger sizeExact() {
+      if (dims.length == 0) return BigInteger.ONE;
+      BigInteger prod = BigInteger.ONE;
+      for (int d : dims) {
+        if (d == 0) return BigInteger.ZERO;
+        prod = prod.multiply(BigInteger.valueOf(d));
+      }
+      return prod;
+    }
+
     @Override
     public Iterator<int[]> iterator() {
       return new CartesianIterator(dims);
@@ -99,13 +121,13 @@ public final class CartesianProduct {
   }
 
   /**
-   * Mixed-radix odometer iterator. State {@code cur} starts at all zeros and increments with carries.
-   * Invariant: for each i, {@code 0 <= cur[i] < dims[i]}.
+   * Mixed-radix odometer iterator. State {@code cur} starts at all zeros and increments with
+   * carries. Invariant: for each i, {@code 0 <= cur[i] < dims[i]}.
    */
   private static final class CartesianIterator implements Iterator<int[]> {
     private final int[] dims;
-    private final int m;         // number of coordinates
-    private final int[] cur;     // current tuple
+    private final int m; // number of coordinates
+    private final int[] cur; // current tuple
     private boolean hasNext;
 
     CartesianIterator(int[] dims) {
@@ -120,7 +142,10 @@ public final class CartesianProduct {
         // If any dimension is 0 -> empty product
         boolean empty = false;
         for (int d : dims) {
-          if (d == 0) { empty = true; break; }
+          if (d == 0) {
+            empty = true;
+            break;
+          }
         }
         if (empty) {
           this.cur = new int[0];
@@ -167,12 +192,17 @@ public final class CartesianProduct {
     }
   }
 
-  /** Simple demo. */
+  /**
+   * Demo entry point.
+   *
+   * @param args command-line arguments (unused)
+   */
   public static void main(String[] args) {
     CartesianProduct.Product p = CartesianProduct.of(2, 3); // 2×3 = 6
     System.out.println("size = " + p.size());
     for (int[] t : p) {
       System.out.println(Arrays.toString(t));
     }
+    System.out.println("sizeExact = " + p.sizeExact());
   }
 }

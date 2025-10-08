@@ -1,14 +1,16 @@
 package org.loudouncodes.combinatorics;
 
+import java.math.BigInteger;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
 
 /**
- * Fluent API for generating {@code k}-permutations (ordered selections without repetition)
- * from the domain {@code {0,1,...,n-1}}.
+ * Fluent API for generating {@code k}-permutations (ordered selections without repetition) from the
+ * domain {@code {0,1,...,n-1}}.
  *
- * <p>Usage:</p>
+ * <p>Usage:
+ *
  * <pre>{@code
  * for (int[] p : Permutations.of(5).take(3)) {
  *   // p is a length-3 array of distinct indices from [0..4]
@@ -16,25 +18,20 @@ import java.util.NoSuchElementException;
  * }</pre>
  *
  * <h2>Design</h2>
- * <ul>
- *   <li>{@link #of(int)} creates a builder bound to {@code n}.</li>
- *   <li>{@link Builder#take(int)} returns an iterable view over all ordered {@code k}-tuples.</li>
- *   <li>Lexicographic order over the {@code k}-length arrays, with no duplicates.</li>
- *   <li>Each call to {@link Iterator#next()} returns a defensive copy.</li>
- * </ul>
  *
- * <h2>Complexity</h2>
  * <ul>
- *   <li>Count: {@code P(n,k) = n! / (n-k)!}.</li>
- *   <li>Time per tuple: {@code O(n)} worst case (scan a used[] and rebuild suffix), typically small for classroom sizes.</li>
- *   <li>Space: {@code O(k)} for the current tuple, plus {@code O(n)} transient in successor.</li>
+ *   <li>{@link #of(int)} creates a builder bound to {@code n}.
+ *   <li>{@link Builder#take(int)} returns an iterable view over all ordered {@code k}-tuples.
+ *   <li>Lexicographic order over the {@code k}-length arrays, with no duplicates.
+ *   <li>Each call to {@link Iterator#next()} returns a defensive copy.
  * </ul>
  *
  * <h2>Edge cases</h2>
+ *
  * <ul>
- *   <li>{@code k == 0}: one empty tuple {@code []}.</li>
- *   <li>{@code k == n}: all full permutations of {@code {0..n-1}}.</li>
- *   <li>Invalid inputs throw {@link IllegalArgumentException}.</li>
+ *   <li>{@code k == 0}: one empty tuple {@code []}.
+ *   <li>{@code k == n}: all full permutations of {@code {0..n-1}}.
+ *   <li>Invalid inputs throw {@link IllegalArgumentException}.
  * </ul>
  */
 public final class Permutations {
@@ -56,7 +53,10 @@ public final class Permutations {
   /** Builder capturing the domain size {@code n}. */
   public static final class Builder {
     private final int n;
-    private Builder(int n) { this.n = n; }
+
+    private Builder(int n) {
+      this.n = n;
+    }
 
     /**
      * Returns all ordered tuples of length {@code k} without repetition.
@@ -76,16 +76,34 @@ public final class Permutations {
     private final int k, n;
 
     private KTake(int k, int n) {
-      this.k = k; this.n = n;
+      this.k = k;
+      this.n = n;
     }
 
-    /** Count = n! / (n-k)! (fits in long only for small classroom-scale inputs). */
+    /**
+     * Count of ordered {@code k}-permutations.
+     *
+     * @return {@code P(n,k) = n! / (n - k)!}
+     */
     public long size() {
       long result = 1L;
       for (int i = 0; i < k; i++) {
         result *= (n - i);
       }
       return result;
+    }
+
+    /**
+     * Exact count of ordered {@code k}-permutations.
+     *
+     * @return {@code P(n,k)} as a {@link BigInteger}
+     */
+    public BigInteger sizeExact() {
+      BigInteger r = BigInteger.ONE;
+      for (int i = 0; i < k; i++) {
+        r = r.multiply(BigInteger.valueOf(n - i));
+      }
+      return r;
     }
 
     @Override
@@ -97,16 +115,18 @@ public final class Permutations {
   /**
    * Iterator that enumerates k-length permutations in lexicographic order with no duplicates.
    * Algorithm:
+   *
    * <ol>
-   *   <li>Start at {@code [0,1,...,k-1]} (or [] if k==0).</li>
+   *   <li>Start at {@code [0,1,...,k-1]} (or [] if k==0).
    *   <li>To advance, scan i from k-1 down to 0:
-   *     <ul>
-   *       <li>Mark values used in prefix {@code p[0..i-1]}.</li>
-   *       <li>Find smallest {@code cand > p[i]} not used in prefix. If found, set {@code p[i]=cand}.</li>
-   *       <li>Rebuild suffix {@code p[i+1..k-1]} with the smallest available values in ascending order.</li>
-   *     </ul>
-   *   </li>
-   *   <li>If no position can increase, we are exhausted.</li>
+   *       <ul>
+   *         <li>Mark values used in prefix {@code p[0..i-1]}.
+   *         <li>Find smallest {@code cand > p[i]} not used in prefix. If found, set {@code
+   *             p[i]=cand}.
+   *         <li>Rebuild suffix {@code p[i+1..k-1]} with the smallest available values in ascending
+   *             order.
+   *       </ul>
+   *   <li>If no position can increase, we are exhausted.
    * </ol>
    */
   private static final class KPermIterator implements Iterator<int[]> {
@@ -172,7 +192,11 @@ public final class Permutations {
     }
   }
 
-  /** Simple demo. */
+  /**
+   * Demo entry point.
+   *
+   * @param args command-line arguments (unused)
+   */
   public static void main(String[] args) {
     Permutations.KTake p = Permutations.of(4).take(2);
     System.out.println("P(4,2) = " + p.size());

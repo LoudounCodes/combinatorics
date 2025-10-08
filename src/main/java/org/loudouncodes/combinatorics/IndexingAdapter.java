@@ -10,12 +10,13 @@ import java.util.Objects;
 /**
  * Bridges from <em>indices</em> to <em>elements</em>.
  *
- * <p>Wrap any {@code Iterable<int[]>} together with a backing {@code List<E>} and iterate
- * {@code List<E>} tuples instead of raw index arrays. Each returned list is a fresh, unmodifiable
- * snapshot of the mapped elements (safe for students to keep or mutate references inside without
- * affecting the iterator's internal state).
+ * <p>Wrap any {@code Iterable<int[]>} together with a backing {@code List<E>} and iterate {@code
+ * List<E>} tuples instead of raw index arrays. Each returned list is a fresh, unmodifiable snapshot
+ * of the mapped elements (safe for students to keep or mutate references inside without affecting
+ * the iterator's internal state).
  *
  * <h2>Example (pairs of toppings)</h2>
+ *
  * <pre>{@code
  * List<String> toppings = List.of("Pepperoni","Mushrooms","Onions","Olives");
  * for (List<String> pizza :
@@ -31,7 +32,7 @@ import java.util.Objects;
  * }</pre>
  *
  * <p>You can wrap <em>any</em> of the generators in this package: combinations, permutations,
- * derangements, Cartesian product, etc.</p>
+ * derangements, Cartesian product, etc.
  *
  * @param <E> element type of the backing list
  * @since 0.1.0

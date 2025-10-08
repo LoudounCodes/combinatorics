@@ -36,8 +36,7 @@ class IndexingAdapterTest {
     List<String> items = List.of("X", "Y", "Z");
 
     List<List<String>> got = new ArrayList<>();
-    for (List<String> t :
-        new IndexingAdapter<>(Permutations.of(items.size()).take(2), items)) {
+    for (List<String> t : new IndexingAdapter<>(Permutations.of(items.size()).take(2), items)) {
       got.add(t);
     }
 
@@ -73,8 +72,14 @@ class IndexingAdapterTest {
         () ->
             new Iterator<int[]>() {
               boolean done = false;
-              @Override public boolean hasNext() { return !done; }
-              @Override public int[] next() {
+
+              @Override
+              public boolean hasNext() {
+                return !done;
+              }
+
+              @Override
+              public int[] next() {
                 if (done) throw new NoSuchElementException();
                 done = true;
                 return new int[] {0, 5};
@@ -92,8 +97,7 @@ class IndexingAdapterTest {
     List<String> items = List.of("one", "two", "three");
 
     List<List<String>> got = new ArrayList<>();
-    for (List<String> t :
-        new IndexingAdapter<>(Combinations.of(items.size()).choose(0), items)) {
+    for (List<String> t : new IndexingAdapter<>(Combinations.of(items.size()).choose(0), items)) {
       got.add(t);
     }
 

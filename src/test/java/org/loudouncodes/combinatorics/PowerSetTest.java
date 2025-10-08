@@ -9,7 +9,6 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Set;
-
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -30,8 +29,8 @@ public class PowerSetTest {
 
     List<int[]> n1 = collect(PowerSet.of(1));
     assertEquals(2, n1.size());
-    assertArrayEquals(new int[0], n1.get(0));      // k=0
-    assertArrayEquals(new int[] {0}, n1.get(1));   // k=1
+    assertArrayEquals(new int[0], n1.get(0)); // k=0
+    assertArrayEquals(new int[] {0}, n1.get(1)); // k=1
   }
 
   @Test
@@ -84,16 +83,17 @@ public class PowerSetTest {
   @DisplayName("Size-then-lexicographic order for n=3")
   void sizeThenLexOrder_n3() {
     List<int[]> got = collect(PowerSet.of(3));
-    List<int[]> expected = List.of(
-        new int[] {},          // k=0
-        new int[] {0},         // k=1
-        new int[] {1},
-        new int[] {2},
-        new int[] {0,1},       // k=2
-        new int[] {0,2},
-        new int[] {1,2},
-        new int[] {0,1,2}      // k=3
-    );
+    List<int[]> expected =
+        List.of(
+            new int[] {}, // k=0
+            new int[] {0}, // k=1
+            new int[] {1},
+            new int[] {2},
+            new int[] {0, 1}, // k=2
+            new int[] {0, 2},
+            new int[] {1, 2},
+            new int[] {0, 1, 2} // k=3
+            );
     assertEquals(expected.size(), got.size(), "power set size mismatch");
     for (int i = 0; i < expected.size(); i++) {
       assertArrayEquals(expected.get(i), got.get(i), "mismatch at index " + i);
