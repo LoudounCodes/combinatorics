@@ -1,23 +1,75 @@
 <?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>Combinations.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">loudouncodes-combinatorics</a> &gt; <a href="index.source.html" class="el_package">org.loudouncodes.combinatorics</a> &gt; <span class="el_source">Combinations.java</span></div><h1>Combinations.java</h1><pre class="source lang-java linenums">package org.loudouncodes.combinatorics;
 
 import java.math.BigInteger;
+import java.util.ArrayDeque;
 import java.util.Arrays;
+import java.util.Deque;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
 
 /**
- * Combinations — k-subsets of {0,1,...,n-1}, with an opt-in flag for repetition.
+ * Utilities for enumerating &lt;em&gt;k&lt;/em&gt;-subsets (combinations) of the ground set {@code
+ * {0,1,...,n-1}}.
  *
- * &lt;p&gt;Fluent usage:
+ * &lt;h2&gt;Overview&lt;/h2&gt;
+ *
+ * &lt;p&gt;This class exposes a fluent builder for two common models:
  *
  * &lt;ul&gt;
- *   &lt;li&gt;No repetition (default): {@code Combinations.of(n).choose(k)}
- *   &lt;li&gt;With repetition: {@code Combinations.of(n).withRepetition().choose(k)}
+ *   &lt;li&gt;&lt;strong&gt;Without repetition (default):&lt;/strong&gt; Each element may appear at most once in a
+ *       combination. Enumeration order is &lt;em&gt;lexicographic&lt;/em&gt;.
+ *   &lt;li&gt;&lt;strong&gt;With repetition (multiset combinations):&lt;/strong&gt; Elements may repeat. We represent
+ *       each multiset as a nondecreasing {@code int[]} of length {@code k}. Enumeration order is
+ *       &lt;em&gt;lexicographic&lt;/em&gt; over those arrays.
  * &lt;/ul&gt;
  *
- * &lt;p&gt;Order is lexicographic in both modes. Returned arrays are fresh defensive copies. Iterators
- * obey the contract: {@code hasNext()} becomes false at exhaustion and {@code next()} then throws
- * {@link java.util.NoSuchElementException}.
+ * &lt;p&gt;Additionally, for the non-repetition model you may request &lt;strong&gt;Gray order&lt;/strong&gt; (also
+ * known as &lt;em&gt;revolving-door&lt;/em&gt; order) via {@link Combinations.Spec#choose(int) choose(k)} →
+ * {@link KChoose#inGrayOrder()}. In Gray order, successive combinations differ by exchanging
+ * exactly one element (symmetric difference size 2), which is useful for certain incremental
+ * algorithms.
+ *
+ * &lt;h2&gt;Fluent usage&lt;/h2&gt;
+ *
+ * &lt;pre&gt;{@code
+ * // No repetition (default), lexicographic:
+ * for (int[] a : Combinations.of(5).choose(3)) {
+ *   // ...
+ * }
+ *
+ * // With repetition (multiset combinations), lexicographic:
+ * for (int[] a : Combinations.of(3).withRepetition().choose(2)) {
+ *   // yields [0,0],[0,1],[0,2],[1,1],[1,2],[2,2]
+ * }
+ *
+ * // No repetition, Gray (revolving-door) order:
+ * for (int[] a : Combinations.of(5).choose(3).inGrayOrder()) {
+ *   // consecutive tuples differ by swapping exactly one element
+ * }
+ * }&lt;/pre&gt;
+ *
+ * &lt;h2&gt;Contracts &amp;amp; guarantees&lt;/h2&gt;
+ *
+ * &lt;ul&gt;
+ *   &lt;li&gt;All iterables return &lt;strong&gt;fresh defensive copies&lt;/strong&gt; on each {@code next()}.
+ *   &lt;li&gt;Iterators obey the standard contract: after exhaustion, {@code hasNext()} is false and
+ *       {@code next()} throws {@link NoSuchElementException}.
+ *   &lt;li&gt;Time per emitted combination is {@code O(k)}; memory is {@code O(k)}.
+ *   &lt;li&gt;Counting methods are available via {@link KChoose#size()} (best-effort {@code long}) and
+ *       {@link KChoose#sizeExact()} (exact {@link BigInteger}).
+ * &lt;/ul&gt;
+ *
+ * &lt;h2&gt;Pedagogical notes&lt;/h2&gt;
+ *
+ * &lt;ul&gt;
+ *   &lt;li&gt;&lt;em&gt;Lexicographic order&lt;/em&gt; for combinations without repetition starts at {@code
+ *       [0,1,2,...,k-1]} and advances by the standard “rightmost bump” rule.
+ *   &lt;li&gt;&lt;em&gt;Lexicographic order&lt;/em&gt; for combinations with repetition starts at {@code [0,0,...,0]}
+ *       and advances by increasing the rightmost entry that can still grow.
+ *   &lt;li&gt;&lt;em&gt;Gray (revolving-door) order&lt;/em&gt; is produced lazily by a stack-based traversal of the
+ *       classic recursive decomposition: {@code G(n,k) = G(n-1,k) followed by reverse(G(n-1,k-1))
+ *       with (n-1) added}.
+ * &lt;/ul&gt;
  */
 public final class Combinations {
 
@@ -26,301 +78,523 @@ public final class Combinations {
   }
 
   /**
-   * Entry point for combinations over the ground set {@code {0,1,...,n-1}}.
+   * Creates a specification for combinations over the ground set {@code {0,1,...,n-1}}.
    *
    * @param n ground-set size (must be {@code &gt;= 0})
-   * @return an immutable specification for building combination iterables
+   * @return an immutable {@link Spec} for configuring enumeration
    * @throws IllegalArgumentException if {@code n &lt; 0}
    */
   public static Spec of(int n) {
-<span class="fc bfc" id="L36" title="All 2 branches covered.">    if (n &lt; 0) throw new IllegalArgumentException(&quot;n must be non-negative&quot;);</span>
-<span class="fc" id="L37">    return new Spec(n, false); // default: without repetition</span>
+<span class="fc bfc" id="L88" title="All 2 branches covered.">    if (n &lt; 0) throw new IllegalArgumentException(&quot;n must be non-negative&quot;);</span>
+<span class="fc" id="L89">    return new Spec(n, false); // default: without repetition</span>
   }
 
-  /** Fluent spec for combinations. Immutable value object. */
+  // ---------------------------------------------------------------------------
+  // Fluent specification
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Immutable, fluent specification for building combination iterables.
+   *
+   * &lt;p&gt;Instances are cheap value objects. Methods never mutate, they return new {@code Spec}s.
+   */
   public static final class Spec {
     private final int n;
     private final boolean repetition;
 
-<span class="fc" id="L45">    private Spec(int n, boolean repetition) {</span>
-<span class="fc" id="L46">      this.n = n;</span>
-<span class="fc" id="L47">      this.repetition = repetition;</span>
-<span class="fc" id="L48">    }</span>
+<span class="fc" id="L105">    private Spec(int n, boolean repetition) {</span>
+<span class="fc" id="L106">      this.n = n;</span>
+<span class="fc" id="L107">      this.repetition = repetition;</span>
+<span class="fc" id="L108">    }</span>
 
     /**
-     * Enable combinations with repetition (multiset combinations).
+     * Enables combinations &lt;em&gt;with&lt;/em&gt; repetition (multiset combinations).
      *
      * @return a new {@code Spec} with repetition enabled
      */
     public Spec withRepetition() {
-<span class="fc" id="L56">      return new Spec(n, true);</span>
+<span class="fc" id="L116">      return new Spec(n, true);</span>
     }
 
     /**
-     * Explicitly disable repetition (regular combinations).
+     * Explicitly disables repetition (regular combinations).
      *
      * @return a new {@code Spec} with repetition disabled
      */
     public Spec withoutRepetition() {
-<span class="nc" id="L65">      return new Spec(n, false);</span>
+<span class="nc" id="L125">      return new Spec(n, false);</span>
     }
 
     /**
-     * Terminal: enumerate all size-{@code k} combinations in lexicographic order.
+     * Finalizes the specification by choosing {@code k} elements.
      *
-     * &lt;p&gt;When repetition is disabled (default), this yields the usual k-combinations (no repeats)
-     * and requires {@code 0 &lt;= k &lt;= n}. When repetition is enabled via {@link #withRepetition()},
-     * this yields multiset combinations (nondecreasing k-tuples), where {@code k &gt;= 0} and {@code
-     * n} may be smaller than {@code k}.
+     * &lt;p&gt;When repetition is disabled (default), this yields ordinary combinations and requires
+     * {@code 0 &lt;= k &lt;= n}. When repetition is enabled via {@link #withRepetition()}, this yields
+     * multiset combinations (nondecreasing {@code k}-tuples), requiring only {@code k &gt;= 0}.
      *
-     * @param k subset size (must be {@code &gt;= 0}; and if repetition is disabled, {@code k &lt;= n})
+     * @param k subset size (must be {@code &gt;= 0}; if repetition is disabled, also {@code k &lt;= n})
      * @return a sized iterable view yielding defensive copies in lexicographic order
      * @throws IllegalArgumentException if arguments are invalid
      */
     public KChoose choose(int k) {
-<span class="fc bfc" id="L81" title="All 2 branches covered.">      if (k &lt; 0) throw new IllegalArgumentException(&quot;k must be non-negative&quot;);</span>
-<span class="fc bfc" id="L82" title="All 4 branches covered.">      if (!repetition &amp;&amp; k &gt; n) {</span>
-<span class="fc" id="L83">        throw new IllegalArgumentException(&quot;k must be \u2264 n when repetition is disabled&quot;);</span>
+<span class="fc bfc" id="L140" title="All 2 branches covered.">      if (k &lt; 0) throw new IllegalArgumentException(&quot;k must be non-negative&quot;);</span>
+<span class="fc bfc" id="L141" title="All 4 branches covered.">      if (!repetition &amp;&amp; k &gt; n) {</span>
+<span class="fc" id="L142">        throw new IllegalArgumentException(&quot;k must be \u2264 n when repetition is disabled&quot;);</span>
       }
-<span class="fc" id="L85">      return new KChoose(n, k, repetition);</span>
+<span class="fc" id="L144">      return new KChoose(n, k, repetition);</span>
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // Iterable view (result of choose(k))
+  // ---------------------------------------------------------------------------
+
   /**
-   * Sized iterable view over k-combinations (with or without repetition).
+   * Sized iterable over {@code k}-combinations (with or without repetition).
    *
-   * &lt;p&gt;Implements {@link Iterable} so it drops into enhanced-for loops, and adds {@link #size()}
-   * and {@link #sizeExact()} for counts.
+   * &lt;p&gt;The default iterator returned by {@link #iterator()} enumerates in lexicographic order. For
+   * the non-repetition model, a Gray-order iterable is available via {@link #inGrayOrder()}.
    */
   public static final class KChoose implements Iterable&lt;int[]&gt; {
     private final int n, k;
     private final boolean repetition;
 
-<span class="fc" id="L99">    KChoose(int n, int k, boolean repetition) {</span>
-<span class="fc" id="L100">      this.n = n;</span>
-<span class="fc" id="L101">      this.k = k;</span>
-<span class="fc" id="L102">      this.repetition = repetition;</span>
-<span class="fc" id="L103">    }</span>
+<span class="fc" id="L162">    KChoose(int n, int k, boolean repetition) {</span>
+<span class="fc" id="L163">      this.n = n;</span>
+<span class="fc" id="L164">      this.k = k;</span>
+<span class="fc" id="L165">      this.repetition = repetition;</span>
+<span class="fc" id="L166">    }</span>
 
     /**
-     * Number of combinations in this view.
+     * Returns the number of combinations in this view as a {@code long}.
      *
-     * &lt;p&gt;No repetition: {@code C(n,k)}. With repetition: {@code C(n+k-1, k)}. This returns a {@code
-     * long} and may overflow for very large inputs; for exact counts use {@link #sizeExact()}.
+     * &lt;p&gt;No repetition: {@code C(n,k)}. With repetition: {@code C(n+k-1, k)}. This may overflow for
+     * large inputs; use {@link #sizeExact()} if you need certainty.
      *
-     * @return the number of combinations (best-effort {@code long})
+     * @return count as best-effort {@code long}
      */
     public long size() {
-<span class="pc bpc" id="L114" title="1 of 2 branches missed.">      if (k == 0) return 1L;</span>
-<span class="fc bfc" id="L115" title="All 2 branches covered.">      if (!repetition) {</span>
-<span class="pc bpc" id="L116" title="1 of 2 branches missed.">        if (k &gt; n) return 0L; // defensive</span>
-<span class="fc" id="L117">        return binomLong(n, k);</span>
+<span class="pc bpc" id="L177" title="1 of 2 branches missed.">      if (k == 0) return 1L;</span>
+<span class="fc bfc" id="L178" title="All 2 branches covered.">      if (!repetition) {</span>
+<span class="pc bpc" id="L179" title="1 of 2 branches missed.">        if (k &gt; n) return 0L; // defensive</span>
+<span class="fc" id="L180">        return binomLong(n, k);</span>
       } else {
-<span class="pc bpc" id="L119" title="1 of 2 branches missed.">        if (n == 0) return 0L; // except k==0 handled above</span>
-<span class="fc" id="L120">        return binomLong(n + k - 1, k);</span>
+<span class="pc bpc" id="L182" title="1 of 2 branches missed.">        if (n == 0) return 0L; // except k==0 handled above</span>
+<span class="fc" id="L183">        return binomLong(n + k - 1, k);</span>
       }
     }
 
     /**
-     * Exact number of combinations as a {@link BigInteger}.
+     * Returns the exact number of combinations as a {@link BigInteger}.
      *
-     * @return exact count ({@code C(n,k)} or {@code C(n+k-1,k)})
+     * &lt;p&gt;No repetition: {@code C(n,k)}. With repetition: {@code C(n+k-1, k)}.
+     *
+     * @return exact count
      */
     public BigInteger sizeExact() {
-<span class="pc bpc" id="L130" title="1 of 2 branches missed.">      if (k == 0) return BigInteger.ONE;</span>
-<span class="fc bfc" id="L131" title="All 2 branches covered.">      if (!repetition) {</span>
-<span class="pc bpc" id="L132" title="1 of 2 branches missed.">        if (k &gt; n) return BigInteger.ZERO;</span>
-<span class="fc" id="L133">        return binomBig(n, k);</span>
+<span class="pc bpc" id="L195" title="1 of 2 branches missed.">      if (k == 0) return BigInteger.ONE;</span>
+<span class="fc bfc" id="L196" title="All 2 branches covered.">      if (!repetition) {</span>
+<span class="pc bpc" id="L197" title="1 of 2 branches missed.">        if (k &gt; n) return BigInteger.ZERO;</span>
+<span class="fc" id="L198">        return binomBig(n, k);</span>
       } else {
-<span class="pc bpc" id="L135" title="1 of 2 branches missed.">        if (n == 0) return BigInteger.ZERO;</span>
-<span class="fc" id="L136">        return binomBig(n + k - 1, k);</span>
+<span class="pc bpc" id="L200" title="1 of 2 branches missed.">        if (n == 0) return BigInteger.ZERO;</span>
+<span class="fc" id="L201">        return binomBig(n + k - 1, k);</span>
       }
     }
 
+    /**
+     * Returns an {@link Iterable} that enumerates the combinations in &lt;strong&gt;Gray
+     * (revolving-door)&lt;/strong&gt; order, where each successive combination differs from the previous
+     * by swapping exactly one element (symmetric difference size 2).
+     *
+     * &lt;p&gt;&lt;strong&gt;Model restriction:&lt;/strong&gt; Gray order is defined only for combinations
+     * &lt;em&gt;without&lt;/em&gt; repetition; attempting to call this after {@code withRepetition()} will
+     * throw. This iterable is independent of the default lexicographic iterator returned by {@link
+     * #iterator()}.
+     *
+     * &lt;p&gt;&lt;strong&gt;First/last tuples:&lt;/strong&gt; The sequence begins with the lexicographically first
+     * combination {@code [0,1,2,...,k-1]} (when {@code k&gt;0}) and ends at {@code [n-k, ..., n-1]}.
+     * For {@code k==0} there is a single empty combination.
+     *
+     * @return iterable over {@code int[]} in Gray order
+     * @throws UnsupportedOperationException if repetition is enabled
+     */
+    public Iterable&lt;int[]&gt; inGrayOrder() {
+<span class="pc bpc" id="L223" title="1 of 2 branches missed.">      if (repetition) {</span>
+<span class="nc" id="L224">        throw new UnsupportedOperationException(</span>
+            &quot;Gray order is only defined for combinations without repetition&quot;);
+      }
+<span class="fc" id="L227">      return () -&gt; new GrayNoRepIt(n, k);</span>
+    }
+
+    /**
+     * Returns an iterator over combinations in &lt;em&gt;lexicographic&lt;/em&gt; order.
+     *
+     * &lt;p&gt;Use {@link #inGrayOrder()} for revolving-door order instead (no repetition only).
+     */
     @Override
     public Iterator&lt;int[]&gt; iterator() {
-<span class="fc bfc" id="L142" title="All 2 branches covered.">      return repetition ? new WithRepIt(n, k) : new NoRepIt(n, k);</span>
+<span class="fc bfc" id="L237" title="All 2 branches covered.">      return repetition ? new WithRepIt(n, k) : new NoRepIt(n, k);</span>
     }
   }
 
   // ---------------------------------------------------------------------------
-  // Iterator for combinations WITHOUT repetition (lex order).
-  //
-  // State 'c' always holds the NEXT combination to return.
-  // After emitting 'c', we advance it; if no successor exists, set c = null.
-  //
-  // First combination (k &gt; 0): [0,1,2,...,k-1]
-  // Successor rule: find rightmost i with c[i] &lt; n - k + i; increment c[i];
-  //                 then for j &gt; i, set c[j] = c[j - 1] + 1.
-  // k == 0: single empty combination.
+  // Iterators: without repetition, lexicographic order
   // ---------------------------------------------------------------------------
+
+  /**
+   * Lexicographic iterator for combinations without repetition.
+   *
+   * &lt;p&gt;State {@code c} holds the next combination. The successor rule is the standard “rightmost
+   * bump”: find the rightmost index {@code i} such that {@code c[i] &lt; n - k + i}, increment it,
+   * then reset the tail to increasing values.
+   */
   private static final class NoRepIt implements Iterator&lt;int[]&gt; {
     private final int n, k;
     private int[] c; // null == exhausted
 
-<span class="fc" id="L161">    NoRepIt(int n, int k) {</span>
-<span class="fc" id="L162">      this.n = n;</span>
-<span class="fc" id="L163">      this.k = k;</span>
-<span class="fc bfc" id="L164" title="All 2 branches covered.">      if (k == 0) {</span>
-<span class="fc" id="L165">        this.c = new int[0];</span>
-<span class="pc bpc" id="L166" title="1 of 2 branches missed.">      } else if (k &gt; n) {</span>
+<span class="fc" id="L256">    NoRepIt(int n, int k) {</span>
+<span class="fc" id="L257">      this.n = n;</span>
+<span class="fc" id="L258">      this.k = k;</span>
+<span class="fc bfc" id="L259" title="All 2 branches covered.">      if (k == 0) {</span>
+<span class="fc" id="L260">        this.c = new int[0];</span>
+<span class="pc bpc" id="L261" title="1 of 2 branches missed.">      } else if (k &gt; n) {</span>
         // Should be prevented by validation, but keep iterator robust.
-<span class="nc" id="L168">        this.c = null;</span>
+<span class="nc" id="L263">        this.c = null;</span>
       } else {
-<span class="fc" id="L170">        this.c = new int[k];</span>
-<span class="fc bfc" id="L171" title="All 2 branches covered.">        for (int i = 0; i &lt; k; i++) c[i] = i;</span>
+<span class="fc" id="L265">        this.c = new int[k];</span>
+<span class="fc bfc" id="L266" title="All 2 branches covered.">        for (int i = 0; i &lt; k; i++) c[i] = i;</span>
       }
-<span class="fc" id="L173">    }</span>
+<span class="fc" id="L268">    }</span>
 
     @Override
     public boolean hasNext() {
-<span class="fc bfc" id="L177" title="All 2 branches covered.">      return c != null;</span>
+<span class="fc bfc" id="L272" title="All 2 branches covered.">      return c != null;</span>
     }
 
     @Override
     public int[] next() {
-<span class="fc bfc" id="L182" title="All 2 branches covered.">      if (c == null) throw new NoSuchElementException(&quot;Combinations exhausted&quot;);</span>
-<span class="fc" id="L183">      int[] out = Arrays.copyOf(c, k); // defensive copy</span>
+<span class="fc bfc" id="L277" title="All 2 branches covered.">      if (c == null) throw new NoSuchElementException(&quot;Combinations exhausted&quot;);</span>
+<span class="fc" id="L278">      int[] out = Arrays.copyOf(c, k); // defensive copy</span>
 
       // advance to next combination
-<span class="fc bfc" id="L186" title="All 2 branches covered.">      if (k == 0) {</span>
-<span class="fc" id="L187">        c = null; // only one empty combination</span>
-<span class="fc" id="L188">        return out;</span>
+<span class="fc bfc" id="L281" title="All 2 branches covered.">      if (k == 0) {</span>
+<span class="fc" id="L282">        c = null; // only one empty combination</span>
+<span class="fc" id="L283">        return out;</span>
       }
-<span class="fc" id="L190">      int i = k - 1;</span>
-<span class="fc bfc" id="L191" title="All 4 branches covered.">      while (i &gt;= 0 &amp;&amp; c[i] == n - k + i) i--;</span>
-<span class="fc bfc" id="L192" title="All 2 branches covered.">      if (i &lt; 0) {</span>
-<span class="fc" id="L193">        c = null; // last one was just returned</span>
+<span class="fc" id="L285">      int i = k - 1;</span>
+<span class="fc bfc" id="L286" title="All 4 branches covered.">      while (i &gt;= 0 &amp;&amp; c[i] == n - k + i) i--;</span>
+<span class="fc bfc" id="L287" title="All 2 branches covered.">      if (i &lt; 0) {</span>
+<span class="fc" id="L288">        c = null; // last one was just returned</span>
       } else {
-<span class="fc" id="L195">        c[i]++;</span>
-<span class="fc bfc" id="L196" title="All 2 branches covered.">        for (int j = i + 1; j &lt; k; j++) c[j] = c[j - 1] + 1;</span>
+<span class="fc" id="L290">        c[i]++;</span>
+<span class="fc bfc" id="L291" title="All 2 branches covered.">        for (int j = i + 1; j &lt; k; j++) c[j] = c[j - 1] + 1;</span>
       }
-<span class="fc" id="L198">      return out;</span>
+<span class="fc" id="L293">      return out;</span>
     }
   }
 
   // ---------------------------------------------------------------------------
-  // Iterator for combinations WITH repetition (multichoose, lex order).
-  //
-  // Represent each multiset as a nondecreasing k-tuple 'a' with values in 0..n-1.
-  // State 'a' always holds the NEXT tuple to return.
-  // After emitting 'a', we advance it; if no successor exists, set a = null.
-  //
-  // First (k &gt; 0): [0,0,...,0]
-  // Successor: find rightmost i with a[i] &lt; n - 1; increment a[i]; set all j&gt;i to a[i].
-  // Edge cases:
-  //   - k == 0: single empty combination.
-  //   - n == 0 &amp;&amp; k &gt; 0: no combinations (a = null).
+  // Iterators: with repetition (multiset combinations), lexicographic order
   // ---------------------------------------------------------------------------
+
+  /**
+   * Lexicographic iterator for multiset combinations (with repetition).
+   *
+   * &lt;p&gt;We enumerate nondecreasing {@code k}-tuples {@code a} whose entries lie in {@code [0,n-1]}.
+   * The successor rule increments the rightmost position that can still grow and copies its new
+   * value to the tail, preserving nondecreasing order.
+   */
   private static final class WithRepIt implements Iterator&lt;int[]&gt; {
     private final int n, k;
     private int[] a; // null == exhausted
 
-<span class="fc" id="L219">    WithRepIt(int n, int k) {</span>
-<span class="fc" id="L220">      this.n = n;</span>
-<span class="fc" id="L221">      this.k = k;</span>
-<span class="fc bfc" id="L222" title="All 2 branches covered.">      if (k == 0) {</span>
-<span class="fc" id="L223">        this.a = new int[0];</span>
-<span class="fc bfc" id="L224" title="All 2 branches covered.">      } else if (n == 0) {</span>
-<span class="fc" id="L225">        this.a = null; // no elements to choose from, except when k==0 handled above</span>
+<span class="fc" id="L312">    WithRepIt(int n, int k) {</span>
+<span class="fc" id="L313">      this.n = n;</span>
+<span class="fc" id="L314">      this.k = k;</span>
+<span class="fc bfc" id="L315" title="All 2 branches covered.">      if (k == 0) {</span>
+<span class="fc" id="L316">        this.a = new int[0];</span>
+<span class="fc bfc" id="L317" title="All 2 branches covered.">      } else if (n == 0) {</span>
+<span class="fc" id="L318">        this.a = null; // no elements to choose from, except when k==0 handled above</span>
       } else {
-<span class="fc" id="L227">        this.a = new int[k]; // all zeros to start</span>
+<span class="fc" id="L320">        this.a = new int[k]; // all zeros to start</span>
       }
-<span class="fc" id="L229">    }</span>
+<span class="fc" id="L322">    }</span>
 
     @Override
     public boolean hasNext() {
-<span class="fc bfc" id="L233" title="All 2 branches covered.">      return a != null;</span>
+<span class="fc bfc" id="L326" title="All 2 branches covered.">      return a != null;</span>
     }
 
     @Override
     public int[] next() {
-<span class="fc bfc" id="L238" title="All 2 branches covered.">      if (a == null) throw new NoSuchElementException(&quot;Combinations-with-repetition exhausted&quot;);</span>
-<span class="fc" id="L239">      int[] out = Arrays.copyOf(a, k); // defensive copy</span>
+<span class="fc bfc" id="L331" title="All 2 branches covered.">      if (a == null) throw new NoSuchElementException(&quot;Combinations-with-repetition exhausted&quot;);</span>
+<span class="fc" id="L332">      int[] out = Arrays.copyOf(a, k); // defensive copy</span>
 
       // advance to next multiset (nondecreasing tuple)
-<span class="fc bfc" id="L242" title="All 2 branches covered.">      if (k == 0) {</span>
-<span class="fc" id="L243">        a = null; // only one empty combination</span>
-<span class="fc" id="L244">        return out;</span>
+<span class="fc bfc" id="L335" title="All 2 branches covered.">      if (k == 0) {</span>
+<span class="fc" id="L336">        a = null; // only one empty combination</span>
+<span class="fc" id="L337">        return out;</span>
       }
-<span class="fc" id="L246">      int i = k - 1;</span>
-<span class="fc bfc" id="L247" title="All 4 branches covered.">      while (i &gt;= 0 &amp;&amp; a[i] == n - 1) i--;</span>
-<span class="fc bfc" id="L248" title="All 2 branches covered.">      if (i &lt; 0) {</span>
-<span class="fc" id="L249">        a = null; // last one was just returned</span>
+<span class="fc" id="L339">      int i = k - 1;</span>
+<span class="fc bfc" id="L340" title="All 4 branches covered.">      while (i &gt;= 0 &amp;&amp; a[i] == n - 1) i--;</span>
+<span class="fc bfc" id="L341" title="All 2 branches covered.">      if (i &lt; 0) {</span>
+<span class="fc" id="L342">        a = null; // last one was just returned</span>
       } else {
-<span class="fc" id="L251">        a[i]++;</span>
-<span class="fc bfc" id="L252" title="All 2 branches covered.">        for (int j = i + 1; j &lt; k; j++) a[j] = a[i];</span>
+<span class="fc" id="L344">        a[i]++;</span>
+<span class="fc bfc" id="L345" title="All 2 branches covered.">        for (int j = i + 1; j &lt; k; j++) a[j] = a[i];</span>
       }
-<span class="fc" id="L254">      return out;</span>
+<span class="fc" id="L347">      return out;</span>
     }
   }
 
   // ---------------------------------------------------------------------------
-  // Binomial helpers (long &amp; BigInteger) with reduction to limit overflow.
+  // Iterators: without repetition, Gray (revolving-door) order
   // ---------------------------------------------------------------------------
 
+  /**
+   * Gray-order iterator for combinations without repetition.
+   *
+   * &lt;p&gt;This is a lazy, stack-based traversal of the standard recursive decomposition: {@code G(n,k)
+   * = G(n-1,k)} followed by {@code reverse(G(n-1,k-1))} with {@code (n-1)} included. Reversal is
+   * achieved by toggling a boolean flag rather than materializing anything.
+   *
+   * &lt;h3&gt;Emitted tuples&lt;/h3&gt;
+   *
+   * &lt;ul&gt;
+   *   &lt;li&gt;If {@code k == 0}, a single empty tuple is emitted.
+   *   &lt;li&gt;If {@code k == n}, the unique tuple {@code [0,1,...,n-1]} is emitted.
+   *   &lt;li&gt;Otherwise, internal nodes descend according to the {@code rev} flag so that two
+   *       consecutive leaves always differ by exactly one exchanged element.
+   * &lt;/ul&gt;
+   *
+   * @implNote We keep a stack of frames representing subproblems and a parallel “suffix” stack of
+   *     the high elements that have been fixed (…, {@code n-2}, {@code n-1}). Leaves emit either
+   *     {@code reverse(suffix)} (for {@code k==0}) or {@code [0..n-1] + reverse(suffix)} (for
+   *     {@code k==n}).
+   */
+  private static final class GrayNoRepIt implements Iterator&lt;int[]&gt; {
+
+    /** Stack frame for a subproblem {@code (n,k)} and its traversal state. */
+    private static final class Frame {
+      final int n, k;
+      final boolean rev;
+      int state; // 0 = first branch not yet taken; 1 = second pending; 2 = done
+      boolean awaitingPop; // true iff we pushed (n-1) before descending to the last child
+
+<span class="fc" id="L385">      Frame(int n, int k, boolean rev) {</span>
+<span class="fc" id="L386">        this.n = n;</span>
+<span class="fc" id="L387">        this.k = k;</span>
+<span class="fc" id="L388">        this.rev = rev;</span>
+<span class="fc" id="L389">        this.state = 0;</span>
+<span class="fc" id="L390">        this.awaitingPop = false;</span>
+<span class="fc" id="L391">      }</span>
+    }
+
+<span class="fc" id="L394">    private final Deque&lt;Frame&gt; stack = new ArrayDeque&lt;&gt;();</span>
+<span class="fc" id="L395">    private final Deque&lt;Integer&gt; suffix = new ArrayDeque&lt;&gt;();</span>
+    private int[] next; // null == exhausted
+
+<span class="fc" id="L398">    GrayNoRepIt(int n, int k) {</span>
+<span class="fc bfc" id="L399" title="All 2 branches covered.">      if (k == 0) {</span>
+        // Single empty combination
+<span class="fc" id="L401">        next = new int[0];</span>
+<span class="pc bpc" id="L402" title="1 of 2 branches missed.">      } else if (k &gt; n) {</span>
+<span class="nc" id="L403">        next = null;</span>
+      } else {
+<span class="fc" id="L405">        stack.push(new Frame(n, k, false));</span>
+<span class="fc" id="L406">        computeNext();</span>
+      }
+<span class="fc" id="L408">    }</span>
+
+    @Override
+    public boolean hasNext() {
+<span class="fc bfc" id="L412" title="All 2 branches covered.">      return next != null;</span>
+    }
+
+    @Override
+    public int[] next() {
+<span class="fc bfc" id="L417" title="All 2 branches covered.">      if (next == null) throw new NoSuchElementException(&quot;Combinations (Gray) exhausted&quot;);</span>
+<span class="fc" id="L418">      int[] out = next;</span>
+<span class="fc" id="L419">      computeNext();</span>
+<span class="fc" id="L420">      return out;</span>
+    }
+
+    /** Advances {@link #next} to the next Gray-order combination or null if exhausted. */
+    private void computeNext() {
+<span class="fc" id="L425">      next = null;</span>
+      while (true) {
+<span class="fc bfc" id="L427" title="All 2 branches covered.">        if (stack.isEmpty()) {</span>
+<span class="fc" id="L428">          return; // exhausted</span>
+        }
+<span class="fc" id="L430">        Frame f = stack.peek();</span>
+
+        // Leaf: k == 0  --&gt; emit reverse(suffix)
+<span class="fc bfc" id="L433" title="All 2 branches covered.">        if (f.k == 0) {</span>
+<span class="fc" id="L434">          int len = suffix.size();</span>
+<span class="fc" id="L435">          int[] out = new int[len];</span>
+<span class="fc" id="L436">          int idx = 0;</span>
+<span class="fc bfc" id="L437" title="All 2 branches covered.">          for (Iterator&lt;Integer&gt; it = suffix.descendingIterator(); it.hasNext(); ) {</span>
+<span class="fc" id="L438">            out[idx++] = it.next();</span>
+          }
+<span class="fc" id="L440">          next = out;</span>
+<span class="fc" id="L441">          stack.pop(); // consume leaf</span>
+<span class="fc" id="L442">          onChildFinished();</span>
+<span class="fc" id="L443">          return;</span>
+        }
+
+        // Leaf: k == n  --&gt; emit [0..n-1] + reverse(suffix)
+<span class="fc bfc" id="L447" title="All 2 branches covered.">        if (f.k == f.n) {</span>
+<span class="fc" id="L448">          int lenLow = f.n;</span>
+<span class="fc" id="L449">          int lenSuf = suffix.size();</span>
+<span class="fc" id="L450">          int[] out = new int[lenLow + lenSuf];</span>
+<span class="fc bfc" id="L451" title="All 2 branches covered.">          for (int i = 0; i &lt; lenLow; i++) out[i] = i;</span>
+<span class="fc" id="L452">          int idx = lenLow;</span>
+<span class="fc bfc" id="L453" title="All 2 branches covered.">          for (Iterator&lt;Integer&gt; it = suffix.descendingIterator(); it.hasNext(); ) {</span>
+<span class="fc" id="L454">            out[idx++] = it.next();</span>
+          }
+<span class="fc" id="L456">          next = out;</span>
+<span class="fc" id="L457">          stack.pop(); // consume leaf</span>
+<span class="fc" id="L458">          onChildFinished();</span>
+<span class="fc" id="L459">          return;</span>
+        }
+
+        // Internal node: descend according to rev and state
+<span class="fc bfc" id="L463" title="All 2 branches covered.">        if (!f.rev) {</span>
+<span class="fc bfc" id="L464" title="All 2 branches covered.">          if (f.state == 0) {</span>
+<span class="fc" id="L465">            f.state = 1;</span>
+<span class="fc" id="L466">            stack.push(new Frame(f.n - 1, f.k, false)); // G(n-1,k)</span>
+<span class="fc" id="L467">            continue;</span>
+<span class="pc bpc" id="L468" title="1 of 2 branches missed.">          } else if (f.state == 1) {</span>
+<span class="fc" id="L469">            f.state = 2;</span>
+<span class="fc" id="L470">            suffix.addLast(f.n - 1); // push high element</span>
+<span class="fc" id="L471">            f.awaitingPop = true;</span>
+<span class="fc" id="L472">            stack.push(new Frame(f.n - 1, f.k - 1, true)); // reverse G(n-1,k-1)</span>
+<span class="fc" id="L473">            continue;</span>
+          } else {
+<span class="nc" id="L475">            stack.pop(); // done</span>
+<span class="nc" id="L476">            continue;</span>
+          }
+        } else {
+<span class="fc bfc" id="L479" title="All 2 branches covered.">          if (f.state == 0) {</span>
+<span class="fc" id="L480">            f.state = 1;</span>
+<span class="fc" id="L481">            suffix.addLast(f.n - 1); // push high element first in reverse mode</span>
+<span class="fc" id="L482">            f.awaitingPop = true;</span>
+<span class="fc" id="L483">            stack.push(new Frame(f.n - 1, f.k - 1, false)); // forward G(n-1,k-1)</span>
+<span class="fc" id="L484">            continue;</span>
+<span class="pc bpc" id="L485" title="1 of 2 branches missed.">          } else if (f.state == 1) {</span>
+<span class="fc" id="L486">            f.state = 2;</span>
+<span class="fc" id="L487">            stack.push(new Frame(f.n - 1, f.k, true)); // then G(n-1,k)</span>
+<span class="fc" id="L488">            continue;</span>
+          } else {
+<span class="nc" id="L490">            stack.pop(); // done</span>
+<span class="nc" id="L491">            continue;</span>
+          }
+        }
+      }
+    }
+
+    /**
+     * Cleans up after returning from a child: pop any high element that was pushed to enter that
+     * child, and unwind fully completed frames.
+     */
+    private void onChildFinished() {
+<span class="fc bfc" id="L502" title="All 2 branches covered.">      while (!stack.isEmpty()) {</span>
+<span class="fc" id="L503">        Frame parent = stack.peek();</span>
+<span class="fc bfc" id="L504" title="All 2 branches covered.">        if (parent.awaitingPop) {</span>
+<span class="fc" id="L505">          suffix.removeLast();</span>
+<span class="fc" id="L506">          parent.awaitingPop = false;</span>
+        }
+<span class="fc bfc" id="L508" title="All 2 branches covered.">        if (parent.state &gt;= 2) {</span>
+<span class="fc" id="L509">          stack.pop(); // fully done, continue unwinding</span>
+<span class="fc" id="L510">          continue;</span>
+        }
+        break; // parent has more to generate; leave it on stack
+      }
+<span class="fc" id="L514">    }</span>
+  }
+
+  // ---------------------------------------------------------------------------
+  // Binomial helpers (long &amp; BigInteger) with fraction reduction
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Computes {@code C(n,k)} as a {@code long}, reducing at each step to mitigate overflow.
+   *
+   * &lt;p&gt;Returns {@code 0} if {@code k&lt;0} or {@code k&gt;n}. May still overflow for very large results.
+   */
   private static long binomLong(int n, int k) {
-<span class="pc bpc" id="L263" title="2 of 4 branches missed.">    if (k &lt; 0 || k &gt; n) return 0L;</span>
-<span class="fc" id="L264">    k = Math.min(k, n - k);</span>
-<span class="fc" id="L265">    long res = 1L;</span>
-<span class="fc bfc" id="L266" title="All 2 branches covered.">    for (int i = 1; i &lt;= k; i++) {</span>
-<span class="fc" id="L267">      long num = n - (k - i); // n-k+1, n-k+2, ..., n</span>
-<span class="fc" id="L268">      long den = i;</span>
-<span class="fc" id="L269">      long g = gcd(num, den);</span>
-<span class="fc" id="L270">      num /= g;</span>
-<span class="fc" id="L271">      den /= g;</span>
+<span class="pc bpc" id="L527" title="2 of 4 branches missed.">    if (k &lt; 0 || k &gt; n) return 0L;</span>
+<span class="fc" id="L528">    k = Math.min(k, n - k);</span>
+<span class="fc" id="L529">    long res = 1L;</span>
+<span class="fc bfc" id="L530" title="All 2 branches covered.">    for (int i = 1; i &lt;= k; i++) {</span>
+<span class="fc" id="L531">      long num = n - (k - i); // n-k+1, n-k+2, ..., n</span>
+<span class="fc" id="L532">      long den = i;</span>
+<span class="fc" id="L533">      long g = gcd(num, den);</span>
+<span class="fc" id="L534">      num /= g;</span>
+<span class="fc" id="L535">      den /= g;</span>
 
       // reduce denominator against current result if possible
-<span class="fc" id="L274">      long g2 = gcd(res, den);</span>
-<span class="fc bfc" id="L275" title="All 2 branches covered.">      if (g2 &gt; 1) {</span>
-<span class="fc" id="L276">        res /= g2;</span>
-<span class="fc" id="L277">        den /= g2;</span>
+<span class="fc" id="L538">      long g2 = gcd(res, den);</span>
+<span class="fc bfc" id="L539" title="All 2 branches covered.">      if (g2 &gt; 1) {</span>
+<span class="fc" id="L540">        res /= g2;</span>
+<span class="fc" id="L541">        den /= g2;</span>
       }
 
-      // multiply (may still overflow for very large results; acceptable for classroom sizes)
-<span class="fc" id="L281">      res *= num;</span>
-
+<span class="fc" id="L544">      res *= num; // may overflow for huge values; acceptable for typical classroom parameters</span>
       // by construction, den should now be 1
     }
-<span class="fc" id="L285">    return res;</span>
+<span class="fc" id="L547">    return res;</span>
   }
 
+  /**
+   * Computes {@code C(n,k)} exactly as a {@link BigInteger}.
+   *
+   * &lt;p&gt;Returns {@link BigInteger#ZERO} if {@code k&lt;0} or {@code k&gt;n}.
+   */
   private static BigInteger binomBig(int n, int k) {
-<span class="pc bpc" id="L289" title="2 of 4 branches missed.">    if (k &lt; 0 || k &gt; n) return BigInteger.ZERO;</span>
-<span class="fc" id="L290">    k = Math.min(k, n - k);</span>
-<span class="fc" id="L291">    BigInteger res = BigInteger.ONE;</span>
-<span class="fc bfc" id="L292" title="All 2 branches covered.">    for (int i = 1; i &lt;= k; i++) {</span>
-<span class="fc" id="L293">      int num = n - (k - i);</span>
-<span class="fc" id="L294">      int den = i;</span>
-<span class="fc" id="L295">      int g = (int) gcd(num, den);</span>
-<span class="fc" id="L296">      num /= g;</span>
-<span class="fc" id="L297">      den /= g;</span>
+<span class="pc bpc" id="L556" title="2 of 4 branches missed.">    if (k &lt; 0 || k &gt; n) return BigInteger.ZERO;</span>
+<span class="fc" id="L557">    k = Math.min(k, n - k);</span>
+<span class="fc" id="L558">    BigInteger res = BigInteger.ONE;</span>
+<span class="fc bfc" id="L559" title="All 2 branches covered.">    for (int i = 1; i &lt;= k; i++) {</span>
+<span class="fc" id="L560">      int num = n - (k - i);</span>
+<span class="fc" id="L561">      int den = i;</span>
+<span class="fc" id="L562">      int g = (int) gcd(num, den);</span>
+<span class="fc" id="L563">      num /= g;</span>
+<span class="fc" id="L564">      den /= g;</span>
 
       // reduce denominator against res if possible (exact division)
-<span class="fc" id="L300">      BigInteger denBI = BigInteger.valueOf(den);</span>
-<span class="fc" id="L301">      BigInteger[] div = res.divideAndRemainder(denBI);</span>
-<span class="pc bpc" id="L302" title="1 of 2 branches missed.">      if (div[1].equals(BigInteger.ZERO)) {</span>
-<span class="fc" id="L303">        res = div[0];</span>
-<span class="fc" id="L304">        den = 1;</span>
+<span class="fc" id="L567">      BigInteger denBI = BigInteger.valueOf(den);</span>
+<span class="fc" id="L568">      BigInteger[] div = res.divideAndRemainder(denBI);</span>
+<span class="pc bpc" id="L569" title="1 of 2 branches missed.">      if (div[1].equals(BigInteger.ZERO)) {</span>
+<span class="fc" id="L570">        res = div[0];</span>
+<span class="fc" id="L571">        den = 1;</span>
       }
 
-<span class="fc" id="L307">      res = res.multiply(BigInteger.valueOf(num));</span>
-<span class="pc bpc" id="L308" title="1 of 2 branches missed.">      if (den != 1) {</span>
-<span class="nc" id="L309">        res = res.divide(BigInteger.valueOf(den)); // exact</span>
+<span class="fc" id="L574">      res = res.multiply(BigInteger.valueOf(num));</span>
+<span class="pc bpc" id="L575" title="1 of 2 branches missed.">      if (den != 1) {</span>
+<span class="nc" id="L576">        res = res.divide(BigInteger.valueOf(den)); // exact</span>
       }
     }
-<span class="fc" id="L312">    return res;</span>
+<span class="fc" id="L579">    return res;</span>
   }
 
+  /**
+   * Greatest common divisor via Euclid's algorithm on nonnegative {@code long}s.
+   *
+   * @param a first value
+   * @param b second value
+   * @return {@code gcd(|a|,|b|)}
+   */
   private static long gcd(long a, long b) {
-<span class="fc" id="L316">    a = Math.abs(a);</span>
-<span class="fc" id="L317">    b = Math.abs(b);</span>
-<span class="fc bfc" id="L318" title="All 2 branches covered.">    while (b != 0) {</span>
-<span class="fc" id="L319">      long t = a % b;</span>
-<span class="fc" id="L320">      a = b;</span>
-<span class="fc" id="L321">      b = t;</span>
-<span class="fc" id="L322">    }</span>
-<span class="fc" id="L323">    return a;</span>
+<span class="fc" id="L590">    a = Math.abs(a);</span>
+<span class="fc" id="L591">    b = Math.abs(b);</span>
+<span class="fc bfc" id="L592" title="All 2 branches covered.">    while (b != 0) {</span>
+<span class="fc" id="L593">      long t = a % b;</span>
+<span class="fc" id="L594">      a = b;</span>
+<span class="fc" id="L595">      b = t;</span>
+<span class="fc" id="L596">    }</span>
+<span class="fc" id="L597">    return a;</span>
   }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

@@ -15,11 +15,11 @@ import org.junit.jupiter.api.Test;
 public class CombinationsTest {
 
   // --------------------------------------------------------------------------
-  // WITHOUT REPETITION
+  // WITHOUT REPETITION — LEXICOGRAPHIC (default)
   // --------------------------------------------------------------------------
   @Nested
-  @DisplayName("Combinations without repetition")
-  class NoRepetition {
+  @DisplayName("Combinations without repetition (lexicographic)")
+  class NoRepetitionLex {
 
     @Test
     @DisplayName("Invalid arguments throw IllegalArgumentException")
@@ -88,7 +88,8 @@ public class CombinationsTest {
       int[] second = it.next(); // [0,2]
       assertNotSame(first, second);
 
-      if (second.length > 0) second[0] = 999;
+      // mutate the previously returned array; should not affect future outputs
+      second[0] = 999;
       int[] third = it.next(); // [0,3]
       assertArrayEquals(new int[] {0, 3}, third);
     }
@@ -113,7 +114,144 @@ public class CombinationsTest {
   }
 
   // --------------------------------------------------------------------------
-  // WITH REPETITION (multiset combinations)
+  // WITHOUT REPETITION — GRAY ORDER (revolving-door style)
+  // --------------------------------------------------------------------------
+  @Nested
+  @DisplayName("Combinations without repetition in Gray order")
+  class NoRepetitionGray {
+
+    @Test
+    @DisplayName(
+        "Gray order adjacency: successive k-subsets differ by swapping exactly one element")
+    void grayAdjacencyProperty() {
+      int n = 6, k = 3;
+      Iterator<int[]> it = Combinations.of(n).choose(k).inGrayOrder().iterator();
+      assertTrue(it.hasNext());
+      int[] prev = it.next();
+      int seen = 1;
+      while (it.hasNext()) {
+        int[] cur = it.next();
+        // In a k-combination Gray code, symmetric difference between successive sets is 2
+        assertEquals(2, symmetricDifferenceSize(prev, cur), "not Gray-adjacent");
+        prev = cur;
+        seen++;
+      }
+      assertEquals(nCk(n, k), seen);
+    }
+
+    @Test
+    @DisplayName(
+        "Gray and lex enumerations produce the same set of combinations (no dupes, no misses)")
+    void sameCoverageAsLex() {
+      int n = 7, k = 3;
+
+      Set<String> lex = new HashSet<>();
+      for (int[] a : Combinations.of(n).choose(k)) lex.add(key(a));
+
+      Set<String> gray = new HashSet<>();
+      for (int[] a : Combinations.of(n).choose(k).inGrayOrder()) gray.add(key(a));
+
+      assertEquals(lex.size(), gray.size(), "counts differ");
+      assertEquals(lex, gray, "elements differ");
+    }
+
+    @Test
+    @DisplayName("Iterator respects hasNext()/next() and throws on exhaustion (Gray)")
+    void iteratorContractGray() {
+      Iterator<int[]> it = Combinations.of(5).choose(2).inGrayOrder().iterator();
+      int seen = 0;
+      while (it.hasNext()) {
+        assertNotNull(it.next());
+        seen++;
+      }
+      assertEquals(nCk(5, 2), seen);
+      assertFalse(it.hasNext());
+      assertThrows(NoSuchElementException.class, it::next);
+    }
+
+    @Test
+    @DisplayName("Returned arrays are defensive copies (Gray)")
+    void defensiveCopiesGray() {
+      Iterator<int[]> it = Combinations.of(5).choose(3).inGrayOrder().iterator();
+      int[] a = it.next();
+      int[] b = it.next();
+      assertNotSame(a, b);
+
+      b[0] = 999;
+      int[] c = it.next();
+      // Only checks immutability: c must be a fresh, correct tuple of size 3
+      assertEquals(3, c.length);
+      for (int i = 1; i < c.length; i++) {
+        assertTrue(c[i - 1] < c[i], "tuple must remain strictly increasing");
+      }
+    }
+
+    @Test
+    @DisplayName("Edge cases: k=0 yields one empty; k=n yields [0..n-1] (Gray)")
+    void edgeCasesGray() {
+      List<int[]> k0 = collect(Combinations.of(8).choose(0).inGrayOrder());
+      assertEquals(1, k0.size());
+      assertArrayEquals(new int[0], k0.get(0));
+
+      int n = 5;
+      List<int[]> kn = collect(Combinations.of(n).choose(n).inGrayOrder());
+      assertEquals(1, kn.size());
+      int[] expected = new int[n];
+      for (int i = 0; i < n; i++) expected[i] = i;
+      assertArrayEquals(expected, kn.get(0));
+    }
+
+    @Test
+    @DisplayName("Invalid arguments still throw when requesting Gray order")
+    void invalidArgsGray() {
+      assertThrows(IllegalArgumentException.class, () -> Combinations.of(-3));
+      assertThrows(
+          IllegalArgumentException.class,
+          () -> {
+            Combinations.of(5).choose(-1).inGrayOrder().iterator().next();
+          });
+      assertThrows(
+          IllegalArgumentException.class,
+          () -> {
+            Combinations.of(3).choose(4).inGrayOrder().iterator();
+          });
+    }
+
+    @Test
+    @DisplayName("Independent iterators in Gray order advance independently")
+    void iteratorIndependenceGray() {
+      Iterator<int[]> it1 = Combinations.of(6).choose(3).inGrayOrder().iterator();
+      Iterator<int[]> it2 = Combinations.of(6).choose(3).inGrayOrder().iterator();
+
+      // Advance it1 by a few steps
+      it1.next();
+      it1.next();
+      it1.next();
+
+      // it2 must still start from the beginning
+      int[] start2 = it2.next();
+      // basic sanity: strictly increasing tuple shape
+      for (int i = 1; i < start2.length; i++) assertTrue(start2[i - 1] < start2[i]);
+
+      int total1 = 3;
+      while (it1.hasNext()) {
+        it1.next();
+        total1++;
+      }
+
+      int total2 = 1; // already consumed one
+      while (it2.hasNext()) {
+        it2.next();
+        total2++;
+      }
+
+      assertEquals(nCk(6, 3), total1);
+      assertEquals(nCk(6, 3), total2);
+    }
+  }
+
+  // --------------------------------------------------------------------------
+  // WITH REPETITION (multiset combinations) — still lexicographic
   // --------------------------------------------------------------------------
   @Nested
   @DisplayName("Combinations with repetition")
@@ -177,8 +315,8 @@ public class CombinationsTest {
       }
       // Invariant: nondecreasing within each tuple
       for (int[] a : out) {
-        for (int i = 0; i + 1 < a.length; i++) {
-          assertTrue(a[i] <= a[i + 1], "tuple not nondecreasing");
+        for (int i = 1; i < a.length; i++) {
+          assertTrue(a[i - 1] <= a[i], "tuple not nondecreasing");
         }
       }
     }
@@ -206,7 +344,7 @@ public class CombinationsTest {
       int[] b = it.next(); // [0,1]
       assertNotSame(a, b);
 
-      if (b.length > 0) b[0] = 999;
+      b[0] = 999;
       int[] c = it.next(); // [0,2]
       assertArrayEquals(new int[] {0, 2}, c);
     }
@@ -216,8 +354,9 @@ public class CombinationsTest {
   // CROSS-CUTTING sanity
   // --------------------------------------------------------------------------
   @Test
-  @DisplayName("Independent iterators from the same spec advance independently and match")
-  void iteratorIndependence() {
+  @DisplayName(
+      "Independent iterators from the same spec (lexicographic) advance independently and match")
+  void iteratorIndependenceLex() {
     Combinations.Spec spec = Combinations.of(6); // no repetition
     Iterator<int[]> it1 = spec.choose(2).iterator();
     Iterator<int[]> it2 = spec.choose(2).iterator();
@@ -249,7 +388,7 @@ public class CombinationsTest {
   }
 
   @Test
-  @DisplayName("No duplicates across enumeration (sample case)")
+  @DisplayName("No duplicates across enumeration (sample case, lexicographic)")
   void noDuplicatesSample() {
     Set<String> seen = new HashSet<>();
     for (int[] a : Combinations.of(7).choose(3)) {
@@ -289,6 +428,25 @@ public class CombinationsTest {
       b = t;
     }
     return Math.abs(a);
+  }
+
+  private static int symmetricDifferenceSize(int[] a, int[] b) {
+    // a and b are strictly increasing k-length arrays of indices
+    int i = 0, j = 0, diff = 0;
+    while (i < a.length && j < b.length) {
+      if (a[i] == b[j]) {
+        i++;
+        j++;
+      } else if (a[i] < b[j]) {
+        diff++;
+        i++;
+      } else {
+        diff++;
+        j++;
+      }
+    }
+    diff += (a.length - i) + (b.length - j);
+    return diff;
   }
 
   private static String key(int[] a) {
