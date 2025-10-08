@@ -248,6 +248,17 @@ public class CombinationsTest {
       assertEquals(nCk(6, 3), total1);
       assertEquals(nCk(6, 3), total2);
     }
+
+    @Test
+    @DisplayName("Edge case k=n (Gray): emits [0..n-1] once and exhausts")
+    void grayEdgeCaseKEqualsN() {
+      int n = 5;
+      Iterator<int[]> it = Combinations.of(n).choose(n).inGrayOrder().iterator();
+      assertTrue(it.hasNext(), "iterator should have one element");
+      assertArrayEquals(new int[] {0, 1, 2, 3, 4}, it.next(), "single tuple must be [0..n-1]");
+      assertFalse(it.hasNext(), "iterator should be exhausted");
+      assertThrows(NoSuchElementException.class, it::next, "must throw when exhausted");
+    }
   }
 
   // --------------------------------------------------------------------------
