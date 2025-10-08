@@ -1,6 +1,6 @@
 # LoudounCodes Combinatorics Library
 
-[Project doumentation, javadocs, and build reports](https://loudouncodes.github.io/Combinatorics/)
+[Project doumentation, javadocs, and build reports](https://loudouncodes.github.io/combinatorics/)
 
 
 A small, classroom-friendly Java library for **generating combinatorial objects**.  
