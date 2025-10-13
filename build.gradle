@@ -1,86 +1,91 @@
-import org.gradle.testing.jacoco.tasks.JacocoCoverageVerification
+// Unified Gradle build for RandKit & Combinatorics (Groovy DSL)
 
+// --- Plugins MUST be first (per Gradle 9) ---
 plugins {
-    id 'java'
+    id 'java-library'
     id 'com.diffplug.spotless' version '6.25.0'
     id 'jacoco'
     id 'pmd'
 }
 
+// ---- Policy toggles (safe after plugins) ----
+ext {
+    enforceCoverage = false   // set true to fail build under coverage threshold
+    coverageMinimum = 0.80    // INSTRUCTION covered ratio
+}
+
 group = 'org.loudouncodes'
 version = '0.1.0'
 
+// ---- Java toolchain & artifacts ----
 java {
-    toolchain {
-        languageVersion = JavaLanguageVersion.of(21)   // enforce JDK 21
-    }
-    withJavadocJar()
+    toolchain { languageVersion = JavaLanguageVersion.of(17) }
     withSourcesJar()
+    withJavadocJar()
 }
 
-repositories {
-    mavenCentral()
-}
+repositories { mavenCentral() }
 
+// ---- Dependencies (JUnit 5 + AssertJ available; no code changes required) ----
 dependencies {
-    testImplementation platform('org.junit:junit-bom:5.11.0')
-    testImplementation 'org.junit.jupiter:junit-jupiter'
-    testImplementation 'org.assertj:assertj-core:3.26.3'
-
-    // Start the JUnit Platform
-    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    testImplementation(platform('org.junit:junit-bom:5.11.0'))
+    testImplementation('org.junit.jupiter:junit-jupiter')
+    testImplementation('org.assertj:assertj-core:3.26.3')
+    testRuntimeOnly('org.junit.platform:junit-platform-launcher')
 }
 
+// ---- Testing & logging ----
 test {
     useJUnitPlatform()
     testLogging {
         events 'passed', 'skipped', 'failed'
+        showStandardStreams = true
+        exceptionFormat 'full'
     }
+    finalizedBy tasks.jacocoTestReport
 }
 
+// ---- Formatting ----
 spotless {
     java {
-        googleJavaFormat()   // run ./gradlew spotlessApply to auto-format
+        googleJavaFormat()
         target 'src/**/*.java'
     }
 }
 
-jacoco {
-    toolVersion = '0.8.12'
-}
+// ---- Coverage (reports always; gate optional via flag) ----
+jacoco { toolVersion = '0.8.12' }
 
 tasks.jacocoTestReport {
-    dependsOn test
+    dependsOn tasks.test
     reports {
-        xml.required = true
         html.required = true
-        csv.required = false
+        xml.required  = true
+        csv.required  = false
     }
 }
 
-// Optional: keep a hard gate if you want minimum coverage later.
-// tasks.named('jacocoTestCoverageVerification', JacocoCoverageVerification).configure {
-//     dependsOn tasks.test
-//     violationRules {
-//         rule {
-//             limit {
-//                 counter = 'INSTRUCTION'
-//                 value   = 'COVEREDRATIO'
-//                 minimum = 0.80
-//             }
-//         }
-//     }
-// }
-// check.dependsOn 'jacocoTestCoverageVerification'
-
-// ---- Fail hard for Javadoc problems ----
-tasks.withType(Javadoc).configureEach {
-    // Treat warnings as errors and enable doclint
-    options.addBooleanOption('Xwerror', true)
-    options.addBooleanOption('Xdoclint:all', true)
+// Always define verification rules
+tasks.named('jacocoTestCoverageVerification',
+        org.gradle.testing.jacoco.tasks.JacocoCoverageVerification).configure {
+    dependsOn tasks.test
+    violationRules {
+        rule {
+            limit {
+                counter = 'INSTRUCTION'
+                value   = 'COVEREDRATIO'
+                minimum = coverageMinimum
+            }
+        }
+    }
 }
 
-// ---- PMD (show metrics/violations; do not fail the build) ----
+// Gate only if toggle is enabled
+if (enforceCoverage) {
+    check.dependsOn 'jacocoTestCoverageVerification'
+}
+
+// ---- PMD (visible, non-blocking; shared optional ruleset) ----
 pmd {
     consoleOutput = true
     incrementalAnalysis = true
@@ -92,47 +97,59 @@ pmd {
 }
 tasks.withType(Pmd).configureEach {
     reports {
-        html.required = true    // build/reports/pmd/main.html, test.html
-        xml.required = false
+        html.required = true
+        xml.required  = false
     }
 }
 
-// ---- Docs helpers: publish reports to GitHub Pages (docs/) ----
+// ---- Javadoc: strict, UTF-8, link to Java 17 API ----
+tasks.withType(Javadoc).configureEach {
+    options.encoding = 'UTF-8'
+    options.charSet  = 'UTF-8'
+    options.addBooleanOption('Xdoclint:all', true)
+    options.addBooleanOption('Werror', true) // JDK 17-compatible
+    options.links('https://docs.oracle.com/en/java/javase/17/docs/api/')
+}
+
+// ---- Publish reports to GitHub Pages (docs/reports/*) ----
+def docsRoot            = layout.projectDirectory.dir('docs')
+def docsReports         = docsRoot.dir('reports')
+def docsReportsApi      = docsReports.dir('api')
+def docsReportsTests    = docsReports.dir('tests')
+def docsReportsCoverage = docsReports.dir('coverage')
+def docsReportsPmd      = docsReports.dir('pmd')
 
 // Javadoc HTML -> docs/reports/api/
 tasks.register('publishJavadoc', Sync) {
     dependsOn tasks.javadoc
-    from(layout.buildDirectory.dir("docs/javadoc"))   // where Gradle writes javadoc HTML
-    into(layout.projectDirectory.dir("docs/reports/api"))
+    from(layout.buildDirectory.dir('docs/javadoc'))
+    into(docsReportsApi)
 }
 
 // Gradle test report -> docs/reports/tests/
 tasks.register('publishTestReport', Sync) {
     dependsOn tasks.test
-    from(layout.buildDirectory.dir("reports/tests/test"))
-    into(layout.projectDirectory.dir("docs/reports/tests"))
+    from(layout.buildDirectory.dir('reports/tests/test'))
+    into(docsReportsTests)
 }
 
 // JaCoCo HTML -> docs/reports/coverage/
 tasks.register('publishCoverageReport', Sync) {
     dependsOn tasks.jacocoTestReport
-    from(layout.buildDirectory.dir("reports/jacoco/test/html"))
-    into(layout.projectDirectory.dir("docs/reports/coverage"))
+    from(layout.buildDirectory.dir('reports/jacoco/test/html'))
+    into(docsReportsCoverage)
 }
 
 // PMD HTML -> docs/reports/pmd/
 tasks.register('publishPmdReports', Sync) {
     dependsOn tasks.pmdMain, tasks.pmdTest
-    from(layout.buildDirectory.dir("reports/pmd"))
-    into(layout.projectDirectory.dir("docs/reports/pmd"))
+    from(layout.buildDirectory.dir('reports/pmd'))
+    into(docsReportsPmd)
 }
 
-// Aggregate publisher (no index.html generation)
+// Aggregate publisher
 tasks.register('publishReports') {
-    dependsOn 'publishTestReport',
-              'publishCoverageReport',
-              'publishPmdReports',
-              'publishJavadoc'
+    dependsOn 'publishJavadoc', 'publishTestReport', 'publishCoverageReport', 'publishPmdReports'
 }
 
 // Keep Pages current after every build
