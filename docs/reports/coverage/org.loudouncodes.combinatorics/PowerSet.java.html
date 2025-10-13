@@ -1,0 +1,239 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>PowerSet.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">loudouncodes-combinatorics</a> &gt; <a href="index.source.html" class="el_package">org.loudouncodes.combinatorics</a> &gt; <span class="el_source">PowerSet.java</span></div><h1>PowerSet.java</h1><pre class="source lang-java linenums">package org.loudouncodes.combinatorics;
+
+import java.math.BigInteger;
+import java.util.Arrays;
+import java.util.Iterator;
+import java.util.NoSuchElementException;
+
+/**
+ * PowerSet — all subsets of {0,1,...,n-1}.
+ *
+ * &lt;p&gt;Default order is size-then-lexicographic: k = 0, 1, ..., n; for each k, emit all
+ * k-combinations in lexicographic order.
+ *
+ * &lt;h2&gt;Examples&lt;/h2&gt;
+ *
+ * &lt;pre&gt;{@code
+ * // n = 3 emits (in size-then-lex order):
+ * // []            (k=0)
+ * // [0] [1] [2]   (k=1)
+ * // [0,1] [0,2] [1,2]  (k=2)
+ * // [0,1,2]       (k=3)
+ * for (int[] subset : PowerSet.of(3)) {
+ *   // use subset
+ * }
+ * }&lt;/pre&gt;
+ *
+ * &lt;h2&gt;Guarantees&lt;/h2&gt;
+ *
+ * &lt;ul&gt;
+ *   &lt;li&gt;Immutable spec; lazy iteration.
+ *   &lt;li&gt;Deterministic order (size-then-lex).
+ *   &lt;li&gt;Defensive copies: each returned {@code int[]} is a fresh snapshot.
+ *   &lt;li&gt;Iterator contract: {@code hasNext()} / {@code next()} consistent; exhaustion throws {@link
+ *       java.util.NoSuchElementException}.
+ *   &lt;li&gt;Argument validation: {@code n &gt;= 0}, else {@link IllegalArgumentException}.
+ * &lt;/ul&gt;
+ */
+public final class PowerSet implements Iterable&lt;int[]&gt; {
+
+  private final int n;
+
+<span class="fc" id="L42">  private PowerSet(int n) {</span>
+<span class="fc bfc" id="L43" title="All 2 branches covered.">    if (n &lt; 0) {</span>
+<span class="fc" id="L44">      throw new IllegalArgumentException(&quot;n must be non-negative&quot;);</span>
+    }
+<span class="fc" id="L46">    this.n = n;</span>
+<span class="fc" id="L47">  }</span>
+
+  /**
+   * Entry point: all subsets of {@code {0,1,...,n-1}}.
+   *
+   * @param n size of the ground set (must be &amp;ge; 0)
+   * @return a {@code PowerSet} iterable over all subsets
+   * @throws IllegalArgumentException if {@code n &lt; 0}
+   */
+  public static PowerSet of(int n) {
+<span class="fc" id="L57">    return new PowerSet(n);</span>
+  }
+
+  /**
+   * Total number of subsets.
+   *
+   * @return {@code 2^n} as a {@link java.math.BigInteger}
+   */
+  public BigInteger count() {
+<span class="fc" id="L66">    return BigInteger.ONE.shiftLeft(n); // 2^n</span>
+  }
+
+  /**
+   * Convenience alias for {@link #count()} returning a best-effort {@code long}.
+   *
+   * &lt;p&gt;If {@code 2^n} does not fit in a signed 64-bit value, returns {@link Long#MAX_VALUE}.
+   *
+   * @return approximate count as a long (saturates at {@code Long.MAX_VALUE} if overflow)
+   */
+  public long size() {
+<span class="fc" id="L77">    BigInteger c = count();</span>
+<span class="pc bpc" id="L78" title="1 of 2 branches missed.">    return c.bitLength() &lt;= 63 ? c.longValue() : Long.MAX_VALUE;</span>
+  }
+
+  /**
+   * Ground-set size.
+   *
+   * @return the value of {@code n}
+   */
+  public int n() {
+<span class="nc" id="L87">    return n;</span>
+  }
+
+  /**
+   * Returns an iterator over all subsets in size-then-lexicographic order.
+   *
+   * @return iterator yielding defensive copies of each subset
+   */
+  @Override
+  public Iterator&lt;int[]&gt; iterator() {
+<span class="fc" id="L97">    return new It(n);</span>
+  }
+
+  // ---------------------------------------------------------------------------
+  // Iterator: walks k = 0..n; for each k, iterates k-combinations in lex order.
+  // Self-contained (no dependency on Combinations).
+  // ---------------------------------------------------------------------------
+  private static final class It implements Iterator&lt;int[]&gt; {
+    private final int n;
+    private int k; // current subset size
+    private CombIt combIt; // iterator over current k-combinations
+    private boolean initialized; // whether first k has been set
+    private boolean done;
+
+<span class="fc" id="L111">    It(int n) {</span>
+<span class="fc" id="L112">      this.n = n;</span>
+<span class="fc" id="L113">      this.k = 0;</span>
+<span class="fc" id="L114">      this.initialized = false;</span>
+<span class="fc" id="L115">      this.done = false;</span>
+<span class="fc" id="L116">      this.combIt = null;</span>
+<span class="fc" id="L117">    }</span>
+
+    @Override
+    public boolean hasNext() {
+<span class="fc bfc" id="L121" title="All 2 branches covered.">      if (done) return false;</span>
+
+      // Initialize first k (k=0) on first call.
+<span class="fc bfc" id="L124" title="All 2 branches covered.">      if (!initialized) {</span>
+<span class="fc" id="L125">        combIt = new CombIt(n, 0);</span>
+<span class="fc" id="L126">        initialized = true;</span>
+<span class="fc" id="L127">        return true; // exactly one empty combination for k=0</span>
+      }
+
+      // If current k still has combos, good.
+<span class="pc bpc" id="L131" title="1 of 4 branches missed.">      if (combIt != null &amp;&amp; combIt.hasNext()) {</span>
+<span class="fc" id="L132">        return true;</span>
+      }
+
+      // Advance k to the next size that has combinations.
+      while (true) {
+<span class="fc" id="L137">        k++;</span>
+<span class="fc bfc" id="L138" title="All 2 branches covered.">        if (k &gt; n) {</span>
+<span class="fc" id="L139">          done = true;</span>
+<span class="fc" id="L140">          return false;</span>
+        }
+<span class="fc" id="L142">        combIt = new CombIt(n, k);</span>
+<span class="pc bpc" id="L143" title="1 of 2 branches missed.">        if (combIt.hasNext()) {</span>
+<span class="fc" id="L144">          return true;</span>
+        }
+      }
+    }
+
+    @Override
+    public int[] next() {
+<span class="fc bfc" id="L151" title="All 2 branches covered.">      if (!hasNext()) {</span>
+<span class="fc" id="L152">        throw new NoSuchElementException(&quot;PowerSet exhausted&quot;);</span>
+      }
+      // CombIt returns a fresh array; still copy defensively for uniform guarantees.
+<span class="fc" id="L155">      int[] tuple = combIt.next();</span>
+<span class="fc" id="L156">      return Arrays.copyOf(tuple, tuple.length);</span>
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Lexicographic k-combination iterator over {0..n-1}
+  //
+  // Emits all size-k subsets in lex order:
+  //   start: [0,1,2,...,k-1]
+  //   after returning the current tuple, precompute the successor; if none, mark done=true.
+  // Contract fixes:
+  //   - k == 0: exactly one emission (the empty set), then hasNext() == false.
+  //   - Last element is returned; no premature NoSuchElementException.
+  // ---------------------------------------------------------------------------
+  private static final class CombIt implements Iterator&lt;int[]&gt; {
+    private final int n, k;
+    private final int[] c; // current combination state
+    private boolean firstEmitted;
+    private boolean done;
+
+<span class="fc" id="L176">    CombIt(int n, int k) {</span>
+<span class="fc" id="L177">      this.n = n;</span>
+<span class="fc" id="L178">      this.k = k;</span>
+<span class="pc bpc" id="L179" title="2 of 4 branches missed.">      if (k &lt; 0 || k &gt; n) {</span>
+<span class="nc" id="L180">        this.c = null;</span>
+<span class="nc" id="L181">        this.done = true;</span>
+<span class="nc" id="L182">        this.firstEmitted = true;</span>
+      } else {
+<span class="fc" id="L184">        this.c = new int[k];</span>
+<span class="fc bfc" id="L185" title="All 2 branches covered.">        for (int i = 0; i &lt; k; i++) c[i] = i;</span>
+<span class="fc" id="L186">        this.done = false;</span>
+<span class="fc" id="L187">        this.firstEmitted = false;</span>
+      }
+<span class="fc" id="L189">    }</span>
+
+    @Override
+    public boolean hasNext() {
+<span class="fc bfc" id="L193" title="All 2 branches covered.">      if (done) return false;</span>
+<span class="pc bpc" id="L194" title="1 of 4 branches missed.">      if (k == 0) return !firstEmitted; // only the empty set once</span>
+<span class="fc" id="L195">      return true; // for k&gt;0, done is authoritative</span>
+    }
+
+    @Override
+    public int[] next() {
+<span class="pc bpc" id="L200" title="1 of 2 branches missed.">      if (!hasNext()) throw new NoSuchElementException(&quot;Combinations exhausted&quot;);</span>
+
+      // Emit the current tuple
+<span class="fc" id="L203">      int[] out = Arrays.copyOf(c, k);</span>
+
+<span class="fc bfc" id="L205" title="All 2 branches covered.">      if (!firstEmitted) {</span>
+<span class="fc" id="L206">        firstEmitted = true;</span>
+<span class="fc bfc" id="L207" title="All 2 branches covered.">        if (k == 0) {</span>
+          // empty set was just returned; nothing else to emit
+<span class="fc" id="L209">          done = true;</span>
+        } else {
+          // prepare successor for k&gt;0
+<span class="fc" id="L212">          advance();</span>
+        }
+<span class="fc" id="L214">        return out;</span>
+      }
+
+      // k&gt;0 and not the first emission: prepare the next state AFTER returning 'out'
+<span class="fc" id="L218">      advance();</span>
+<span class="fc" id="L219">      return out;</span>
+    }
+
+    // Compute successor into 'c'; if none exists, mark done=true.
+    private void advance() {
+<span class="pc bpc" id="L224" title="1 of 2 branches missed.">      if (k == 0) {</span>
+<span class="nc" id="L225">        done = true;</span>
+<span class="nc" id="L226">        return;</span>
+      } // defensive
+<span class="fc" id="L228">      int i = k - 1;</span>
+<span class="fc bfc" id="L229" title="All 4 branches covered.">      while (i &gt;= 0 &amp;&amp; c[i] == n - k + i) i--;</span>
+<span class="fc bfc" id="L230" title="All 2 branches covered.">      if (i &lt; 0) {</span>
+<span class="fc" id="L231">        done = true; // no successor; we've just returned the last tuple</span>
+      } else {
+<span class="fc" id="L233">        c[i]++;</span>
+<span class="fc bfc" id="L234" title="All 2 branches covered.">        for (int j = i + 1; j &lt; k; j++) c[j] = c[j - 1] + 1;</span>
+      }
+<span class="fc" id="L236">    }</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>
