@@ -5,9 +5,9 @@
 ## What this library is for
 
 * **Learning by doing.** Generate combinatorial objects and loop over them with simple, readable code.
-* **Fluent API that reads like math.**
-  `Combinations.of(12).choose(3)` → all 3-subsets of `{0..11}`
-  `Permutations.of(5).take(2)` → all ordered pairs from `{0..4}`
+* **Fluent API that reads like math.**  
+  `Combinations.of(12).choose(3)` → all 3-subsets of `{0..11}`  
+  `Permutations.of(5).take(2)` → all ordered pairs from `{0..4}`  
   `PowerSet.of(4)` → all subsets of `{0..3}`
 * **Safe for classrooms.** Iterators are lazy, deterministic, validate arguments, and return **defensive copies** so student code can’t accidentally mutate iterator state.
 * **Built-in counts.** Most views expose `size()`/`sizeExact()` so you can discuss *how many* without enumerating.
@@ -24,7 +24,7 @@ Combinations.of(12).choose(3)                 // “choose 3 from 12 (no repetit
 Combinations.of(8).choose(3).inGrayOrder()    // “same set, but Gray (minimal-change) order”
 Combinations.of(6).withRepetition().choose(4) // “choose 4 from 6 with repetition”
 Permutations.of(5).take(3)                    // “take ordered 3-tuples without repetition”
-PowerSet.of(5)                                 // “all subsets of a 5-element set”
+PowerSet.of(5)                                // “all subsets of a 5-element set”
 CartesianProduct.of(2,3,2)                    // “mixed-radix tuples with dims 2×3×2”
 Derangements.of(5).all()                      // “all permutations with no fixed points”
 ````
@@ -120,7 +120,7 @@ public class PizzaDemo {
 
 ## API Docs
 
-* [Javadoc](./reports/api/)
+* [Javadoc](./reports/api/index.html)
 
 ---
 
@@ -130,3 +130,4 @@ public class PizzaDemo {
 * **Gray order tip:** when you need to update a running total or bitset per step, Gray-order combinations let you apply a constant-time “remove one / add one” change.
 * When in doubt about how many results you’ll get, call `size()` or `sizeExact()` first.
 * If you see an exception, read it—it’s usually an input check doing you a favor (e.g., `k > n` without repetition).
+

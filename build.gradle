@@ -154,3 +154,22 @@ tasks.register('publishReports') {
 
 // Keep Pages current after every build
 build.finalizedBy tasks.named('publishReports')
+
+// ---- Clean docs/reports contents but keep the directory itself ----
+tasks.register('cleanDocsReports', Delete) {
+    // Delete all contents under docs/reports
+    delete docsReports.asFileTree
+    // Recreate the empty directory (and its standard subfolders) afterward
+    doLast {
+        docsReports.asFile.mkdirs()
+        docsReportsApi.asFile.mkdirs()
+        docsReportsTests.asFile.mkdirs()
+        docsReportsCoverage.asFile.mkdirs()
+        docsReportsPmd.asFile.mkdirs()
+    }
+}
+
+// Make `clean` also clear docs/reports contents
+tasks.named('clean') {
+    dependsOn 'cleanDocsReports'
+}
